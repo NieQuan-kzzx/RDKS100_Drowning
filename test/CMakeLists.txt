@@ -16,9 +16,9 @@ foreach(test_src ${TEST_FILES})
     # 链接它之后，test 就不需要再手动写一长串 target_include_directories 了！
     target_link_libraries(${test_name}
         PRIVATE
-        lib_algorithm    # 自动带入 yolo, bytetrack 等头文件路径
-        lib_base         # 如果 base 里的 include 也是 PUBLIC 的话
-        hobot_utils      # 解决 draw_boxes, letterbox_resize 等符号报错
+        lib_algorithm
+        lib_base  
+        hobot_utils      
         lib_common
         lib_sensor
         ${HOBOT_LINK_LIBS}

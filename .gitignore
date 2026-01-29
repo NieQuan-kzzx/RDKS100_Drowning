@@ -45,3 +45,5 @@
 *.mp4
 
 .hbm
+
+/.cache

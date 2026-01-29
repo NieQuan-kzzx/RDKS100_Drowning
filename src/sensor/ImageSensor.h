@@ -14,6 +14,8 @@
 #include "plog/Appenders/ColorConsoleAppender.h"
 #include "plog/Formatters/TxtFormatter.h"
 
+// 定义了图像采集器的基类，封装了采集线程、数据队列、帧获取等通用功能，便于不同采集设别的统一管理。
+
 class ImageSensor
 {
 public:

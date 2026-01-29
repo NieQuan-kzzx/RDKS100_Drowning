@@ -12,6 +12,7 @@ list(APPEND HIKSDK_LIBRARIES
     "${HIKSDK_LIB_DIR}/libhcnetsdk.so"
     "${HIKSDK_LIB_DIR}/libHCCore.so"
     "${HIKSDK_LIB_DIR}/libhpr.so"
+    "${HIKSDK_LIB_DIR}/libPlayCtrl.so"
 )
 
 # set (HIKSDK_DIR "/opt/MVS")

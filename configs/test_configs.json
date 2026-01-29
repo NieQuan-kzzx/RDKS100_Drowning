@@ -1,0 +1,8 @@
+{
+    "HikCamera": {
+        "ip": "192.168.127.15",
+        "port": 8000,
+        "user": "admin",
+        "pass": "waterline123456"
+    }
+}

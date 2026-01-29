@@ -21,6 +21,8 @@ PRIVATE
     ${OpenCV_LIBRARIES}
     lib_base
     lib_algorithm
+    lib_common
+    lib_sensor 
 PUBLIC
     Qt::Widgets
 )
