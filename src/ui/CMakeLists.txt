@@ -9,6 +9,7 @@ add_library(lib_ui
 SHARED 
     mainwindow.cpp
     mainwindow.ui
+    DetectionWorker.cpp
 )
 
 target_include_directories(lib_ui 

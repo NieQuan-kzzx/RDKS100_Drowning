@@ -19,6 +19,9 @@ public:
                int _queue_max_length = 10, int _capture_interval_ms = 0, bool _is_full_drop = true);
     ~RTSPCamera();
 
+    void start() override;
+    void stop() override;
+
     // 控制接口
     void pause();
     void resume();

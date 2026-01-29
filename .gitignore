@@ -44,6 +44,6 @@
 
 *.mp4
 
-.hbm
+/tem
 
 /.cache

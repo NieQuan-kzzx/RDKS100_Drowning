@@ -87,7 +87,7 @@
             <number>0</number>
            </property>
            <item>
-            <widget class="QLabel" name="OriginalFrame">
+            <widget class="QLabel" name="labelOriginal">
              <property name="minimumSize">
               <size>
                <width>640</width>
@@ -109,7 +109,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QLabel" name="ProcessFrame">
+            <widget class="QLabel" name="labelProcessed">
              <property name="minimumSize">
               <size>
                <width>640</width>
@@ -166,7 +166,7 @@
          <item>
           <layout class="QHBoxLayout" name="Button_1">
            <item>
-            <widget class="QPushButton" name="OpenCamera">
+            <widget class="QPushButton" name="btnOpen">
              <property name="minimumSize">
               <size>
                <width>101</width>
@@ -191,7 +191,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="CloseCamera">
+            <widget class="QPushButton" name="btnClose">
              <property name="minimumSize">
               <size>
                <width>101</width>
@@ -229,7 +229,7 @@
             </spacer>
            </item>
            <item>
-            <widget class="QPushButton" name="PauseCamera">
+            <widget class="QPushButton" name="btnPause">
              <property name="minimumSize">
               <size>
                <width>101</width>
@@ -254,7 +254,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="CaptureFrame">
+            <widget class="QPushButton" name="btnCapture">
              <property name="minimumSize">
               <size>
                <width>101</width>
@@ -292,7 +292,7 @@
             </spacer>
            </item>
            <item>
-            <widget class="QComboBox" name="ModelSelect">
+            <widget class="QComboBox" name="comboBoxModels">
              <property name="minimumSize">
               <size>
                <width>101</width>
@@ -339,7 +339,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="MakeSure">
+            <widget class="QPushButton" name="btnConfirm">
              <property name="minimumSize">
               <size>
                <width>101</width>
@@ -377,7 +377,7 @@
             </spacer>
            </item>
            <item>
-            <widget class="QRadioButton" name="StartRecording">
+            <widget class="QRadioButton" name="radioStartRecord">
              <property name="font">
               <font>
                <family>Agency FB</family>
@@ -390,7 +390,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QRadioButton" name="StopRecording">
+            <widget class="QRadioButton" name="radioStopRecord">
              <property name="font">
               <font>
                <family>Agency FB</family>
