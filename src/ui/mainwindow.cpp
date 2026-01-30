@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include <QTimer>
+#include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -7,102 +9,163 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // 1. 必须注册 cv::Mat 类型，否则跨线程信号槽无法传递图像
     qRegisterMetaType<cv::Mat>("cv::Mat");
 
-    // 2. 初始化系统
     initSystems();
+
+    // 启动状态监控定时器，每 500ms 更新一次 UI 按钮可用性
+    QTimer *statusTimer = new QTimer(this);
+    connect(statusTimer, &QTimer::timeout, this, &MainWindow::updateButtonStates);
+    statusTimer->start(500);
+
+    // 绑定录制按钮点击事件
+    connect(ui->radioStartRecord, &QRadioButton::clicked, this, [this](){ handleRecording(true); });
+    connect(ui->radioStopRecord, &QRadioButton::clicked, this, [this](){ handleRecording(false); });
 }
 
 MainWindow::~MainWindow()
 {
-    // 停止所有后台逻辑
     if (m_worker) m_worker->stop();
     if (m_cam) m_cam->stop();
-    
     delete ui;
-    // ThreadPool 和 RTSPCamera 的析构函数会自动处理线程回收
 }
 
 void MainWindow::initSystems()
 {
-    // 初始化摄像头 (RTSP地址, 宽, 高, 队列长度, 间隔, 是否丢弃新帧)
     m_cam = new RTSPCamera("rtsp://admin:waterline123456@192.168.127.15", 1920, 1080, 10, 0, false);
-
-    // 初始化线程池 (建议线程数根据 CPU 核心数设置)
     m_pool = new ThreadPool(4);
-
-    // 初始化工作者
     m_worker = new DetectionWorker(m_cam, this);
 
-    // 连接信号：当 Worker 处理完图像时，通知 UI 更新
-    connect(m_worker, &DetectionWorker::frameReady, this, &MainWindow::updateUI);
-    connect(ui->radioStartRecord, &QRadioButton::clicked, this, [this]() {
-        QString fileName = "Record_" + QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + ".avi";
-        m_worker->setRecording(true, fileName.toStdString());
-        PLOGI << "Start Recording: " << fileName.toStdString();
-    });
-    connect(ui->radioStopRecord, &QRadioButton::clicked, this, [this]() {
+    // 初始按钮状态刷新
+    updateButtonStates();
+}
+
+// ---------------- 录制统一调度逻辑 ----------------
+
+void MainWindow::handleRecording(bool start)
+{
+    if (!m_cam || !m_cam->isRunning()) return;
+
+    if (start) {
+        QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+        
+        // 1. 启动原始路录制
+        QString rawPath = "records/Raw_" + timeStr + ".avi";
+        m_worker->setRecording(true, rawPath.toStdString());
+
+        // 2. 如果推理正在运行，同时启动推理路录制
+        if (m_worker->isInferRunning()) {
+            QString inferPath = "records/Infer_" + timeStr + ".avi";
+            m_worker->setInferRecording(true, inferPath.toStdString());
+            ui->statusbar->showMessage("已开启双路录制", 3000);
+        } else {
+            ui->statusbar->showMessage("已开启原始路录制 (AI未就绪)", 3000);
+        }
+    } else {
+        // 关闭所有录制
         m_worker->setRecording(false);
-        PLOGI << "Stop Recording";
-    });
+        m_worker->setInferRecording(false);
+        ui->statusbar->showMessage("已停止所有录制", 3000);
+    }
 }
 
 // ---------------- 按钮逻辑实现 ----------------
+
 void MainWindow::on_btnOpen_clicked() {
-    // 1. 信号安全连接：防止多次 connect 导致处理函数被调用多次
-    disconnect(m_worker, &DetectionWorker::frameReady, this, &MainWindow::updateUI);
+    // 连接信号
     connect(m_worker, &DetectionWorker::frameReady, this, &MainWindow::updateUI, Qt::UniqueConnection);
+    connect(m_worker, &DetectionWorker::inferFrameReady, this, [this](cv::Mat frame){
+        if (frame.empty()) return;
+        cv::Mat showFrame;
+        cv::resize(frame, showFrame, cv::Size(640, 360));
+        QImage img = matToQImage(showFrame);
+        ui->labelProcessed->setPixmap(QPixmap::fromImage(img).scaled(
+            ui->labelProcessed->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }, Qt::UniqueConnection);
 
-    // 2. 启动硬件
     m_cam->start(); 
-
-    // 3. 启动处理逻辑
     m_pool->enqueue([this](){ m_worker->processLoop(); });
-    
-    ui->btnOpen->setEnabled(false);
-    ui->btnClose->setEnabled(true);
 }
 
 void MainWindow::on_btnClose_clicked() {
-    // 1. 掐断信号流，防止 UI 在销毁期间接收数据导致崩溃
-    disconnect(m_worker, &DetectionWorker::frameReady, this, &MainWindow::updateUI);
-
-    // 2. 停止逻辑和硬件
+    // 停止录制和工作流
+    handleRecording(false); // 确保录制安全关闭
     m_worker->stop();
     m_cam->stop();
 
-    // 3. 强制给各个线程一点点退出循环的时间
-    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    updateButtonStates();
+
+    // 断开显示信号，清空 Label
+    disconnect(m_worker, &DetectionWorker::frameReady, this, &MainWindow::updateUI);
+    disconnect(m_worker, &DetectionWorker::inferFrameReady, nullptr, nullptr);
 
     ui->labelOriginal->clear();
     ui->labelProcessed->clear();
-    
-    ui->btnOpen->setEnabled(true);
-    ui->btnClose->setEnabled(false);
-    PLOGI << "System closed.";
+    ui->labelOriginal->setText("摄像头已关闭");
+    ui->labelProcessed->setText("推理已停止");
 }
 
 void MainWindow::on_btnPause_clicked()
 {
+    if (!m_cam || !m_cam->isRunning()) return;
+
     static bool isPaused = false;
     isPaused = !isPaused;
-    
     m_worker->setPaused(isPaused);
     ui->btnPause->setText(isPaused ? "恢复拍摄" : "暂停拍摄");
 }
 
 void MainWindow::on_btnCapture_clicked()
 {
-    // 触发 Worker 内部的截图逻辑
-    m_worker->triggerSnapshot();
+    if (!m_cam || !m_cam->isRunning()) return;
+
+    // Worker 内部会自动判断单路或双路截图
+    m_worker->triggerSnapshot(); 
+    ui->statusbar->showMessage("截图指令已发送", 2000);
 }
 
 void MainWindow::on_btnConfirm_clicked()
 {
-    // 这里可以获取下拉框选中的模型，传递给 Worker 加载模型
-    QString selectedModel = ui->comboBoxModels->currentText();
-    // m_worker->loadModel(selectedModel); // 预留给 YOLO 推理接口
+    if (!m_cam || !m_cam->isRunning()) return;
+
+    QString selectedMode = ui->comboBoxModels->currentText();
+    std::string modelType = "YOLO11"; 
+    std::string modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
+
+    if (selectedMode.contains("目标检测")) {
+        modelType = "YOLO11";
+        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
+    } 
+
+    m_worker->switchModel(modelType, modelPath);
+    
+    // 启动推理循环
+    m_pool->enqueue([this](){ m_worker->inferenceLoop(); });
+
+    // --- 联动点：如果正在录制中，开启模型的一瞬间自动补齐推理流录制 ---
+    if (ui->radioStartRecord->isChecked()) {
+        QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+        QString inferPath = "records/Infer_" + timeStr + ".avi";
+        m_worker->setInferRecording(true, inferPath.toStdString());
+    }
+}
+
+void MainWindow::updateButtonStates()
+{
+    bool isCamRunning = m_cam && m_cam->isRunning();
+    
+    // UI 可用性控制
+    ui->btnCapture->setEnabled(isCamRunning); 
+    ui->btnPause->setEnabled(isCamRunning);
+    ui->radioStartRecord->setEnabled(isCamRunning);
+    ui->radioStopRecord->setEnabled(isCamRunning);
+    ui->btnConfirm->setEnabled(isCamRunning);
+
+    // 逻辑保护：如果摄像头意外断开，强制重置录制单选框
+    if (!isCamRunning && ui->radioStartRecord->isChecked()) {
+        ui->radioStopRecord->setChecked(true);
+        handleRecording(false);
+    }
 }
 
 // ---------------- 图像处理与显示 ----------------
@@ -111,11 +174,9 @@ void MainWindow::updateUI(cv::Mat frame)
 {
     if (frame.empty()) return;
 
-    // 将 1080P 缩放为适合显示的尺寸，减少 UI 渲染压力
     cv::Mat showFrame;
     cv::resize(frame, showFrame, cv::Size(640, 360));
 
-    // 转换为 QImage 并显示到左侧 Label
     QImage img = matToQImage(showFrame);
     ui->labelOriginal->setPixmap(QPixmap::fromImage(img).scaled(
         ui->labelOriginal->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -124,7 +185,6 @@ void MainWindow::updateUI(cv::Mat frame)
 QImage MainWindow::matToQImage(const cv::Mat& mat)
 {
     if (mat.type() == CV_8UC3) {
-        // BGR -> RGB
         return QImage((const uchar*)mat.data, mat.cols, mat.rows, mat.step, QImage::Format_BGR888).rgbSwapped();
     } else if (mat.type() == CV_8UC1) {
         return QImage((const uchar*)mat.data, mat.cols, mat.rows, mat.step, QImage::Format_Grayscale8);

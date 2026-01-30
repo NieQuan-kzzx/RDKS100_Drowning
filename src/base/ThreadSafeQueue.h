@@ -28,6 +28,20 @@ public:
         cv.notify_one();
     }
 
+    // 清空队列
+    void clear()
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        std::queue<T> empty;
+        std::swap(q, empty);
+    }
+
+    // 唤醒所有等待的线程（防止退出时 dequeue 卡死）
+    void abort()
+    {
+        cv.notify_all();
+    }
+
     // 阻塞式出队操作
     T dequeue()
     {

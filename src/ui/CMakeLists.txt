@@ -23,7 +23,8 @@ PRIVATE
     lib_base
     lib_algorithm
     lib_common
-    lib_sensor 
+    lib_sensor
+    lib_inference
 PUBLIC
     Qt::Widgets
 )
