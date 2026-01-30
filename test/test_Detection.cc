@@ -1,7 +1,7 @@
 // Attention: This program runs on RDK S100 board.
 // D-Robotics S100 *.hbm 模型路径
 // Path of D-Robotics S100 *.hbm model.
-#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/ultralytics_YOLO.hbm"
+#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm"
 // 推理使用的测试图片路径
 // Path of the test image used for inference.
 #define TEST_IMG_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/bus.jpg"

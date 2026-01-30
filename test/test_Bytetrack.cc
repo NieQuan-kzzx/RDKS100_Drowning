@@ -15,7 +15,7 @@
 // Google Flags库，#include "gflags/gflags.h"。
 // 这里的 DEFINE_string 是 gflags 库（Google Flags）中定义命令行参数的一个宏。
 // 参数分别为：变量名，默认参数，说明文字
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/ultralytics_YOLO.hbm",
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm",
               "Path to BPU Quantized *.hbm model file");
 DEFINE_string(test_img, "/home/sunrise/Desktop/test_bmp/1.jpg",
               "Path to load the test image.");

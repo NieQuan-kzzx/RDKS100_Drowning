@@ -30,7 +30,7 @@ void signal_handler_func(int signum) {
 DEFINE_int32(width,  1920, "输入视频的宽度");
 DEFINE_int32(height, 1080, "输入视频的高度");
 DEFINE_string(input_path, "/app/res/assets/1080P_test.h264", "输入H.264文件的路径");
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/ultralytics_YOLO.hbm", "BPU量化模型文件路径");
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm", "BPU量化模型文件路径");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_coco.names", "类别名称列表文件");
 DEFINE_double(score_thres, 0.25, "目标检测置信度阈值");
 DEFINE_double(nms_thres, 0.45, "非极大值抑制(NMS)的IoU阈值");

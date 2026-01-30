@@ -9,7 +9,7 @@
 #include "common_utils.hpp"
 
 // 命令行参数
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/yolo11n_pose_nashe_640x640_nv12.hbm",
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/yolo11n_pose_nashe_640x640_nv12.hbm",
               "BPU量化模型路径 (*.hbm)");
 DEFINE_string(video_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/test.mp4", "视频文件路径或摄像头索引");
 DEFINE_string(output_path, "output.mp4", "输出视频路径，为空则不保存");

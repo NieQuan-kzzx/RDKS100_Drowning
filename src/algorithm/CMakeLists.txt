@@ -4,6 +4,7 @@ file(GLOB_RECURSE ALGO_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_pose/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_seg/src/*.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SAHI/src/*.cc"
 )
 
 # 2. 生成算法动态库
@@ -18,6 +19,7 @@ PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_pose/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_seg/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SAHI/include"
     ${Eigen3_INCLUDE_DIRS}
     ${HOBOT_INCLUDE_DIRS}
 )
@@ -27,7 +29,7 @@ target_link_libraries(lib_algorithm
 PUBLIC
     ${OpenCV_LIBS} 
     Eigen3::Eigen
-    hobot_utils        # <--- 必须添加：链接根目录定义的工具库
+    hobot_utils
 PRIVATE
     ${HOBOT_LINK_LIBS} 
     OpenMP::OpenMP_CXX

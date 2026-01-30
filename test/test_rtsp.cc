@@ -155,7 +155,7 @@ void signal_handler_func(int signum) { is_stop = true; }
 
 DEFINE_string(rtsp_url, "rtsp://admin:waterline123456@192.168.127.15", "RTSP URL");
 DEFINE_string(transfer_type, "tcp", "tcp or udp");
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/ultralytics_YOLO.hbm", "YOLO11 model path");
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm", "YOLO11 model path");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_coco.names", "Label file path");
 DEFINE_double(score_thres, 0.25, "Score threshold");
 DEFINE_double(nms_thres, 0.45, "NMS threshold");

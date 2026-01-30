@@ -1,5 +1,4 @@
-#ifndef DETECTIONWORKER_H
-#define DETECTIONWORKER_H
+#pragma once
 
 #include <QObject>
 #include <QDateTime>
@@ -76,5 +75,3 @@ private:
 
     void initStorage();
 };
-
-#endif

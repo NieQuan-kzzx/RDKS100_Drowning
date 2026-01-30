@@ -1,5 +1,4 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#pragma once
 
 #include <QMainWindow>
 #include <QDateTime>
@@ -54,5 +53,3 @@ private:
     QImage matToQImage(const cv::Mat& mat);
     void initSystems();
 };
-
-#endif // MAINWINDOW_H

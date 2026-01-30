@@ -1,7 +1,7 @@
 
 // D-Robotics S100 *.hbm 模型路径
 // Path of D-Robotics S100 *.hbm model.
-#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/YOLO11n-pose.hbm"
+#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11n-pose.hbm"
 
 // 推理使用的测试图片路径
 // Path of the test image used for inference.
