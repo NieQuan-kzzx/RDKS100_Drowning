@@ -1,6 +1,5 @@
 #include "HikCamera.h"
 #include <cstring>
-#include <plog/Log.h>
 
 HikCamera::HikCamera(const HikConfig& _config, int _queue_max_length, bool _is_full_drop,
                     int _capture_interval_ms)

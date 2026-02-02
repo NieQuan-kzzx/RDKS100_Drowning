@@ -15,8 +15,8 @@
 #include "SAHI.h" // 包含你提供的 SAHI 头文件
 
 DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm", "Path to BPU model");
-DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/1.mp4", "Path to input video");
-DEFINE_string(output_video, "sahi_result.mp4", "Path to save output");
+DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/1080p.mp4", "Path to input video");
+DEFINE_string(output_video, "sahi_result1.mp4", "Path to save output");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_coco.names", "Path to labels");
 DEFINE_double(score_thres, 0.25, "Score threshold");
 DEFINE_double(nms_thres, 0.45, "NMS IoU threshold"); // SAHI 建议全局 NMS 稍微严一点

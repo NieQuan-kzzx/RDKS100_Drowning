@@ -133,9 +133,13 @@ void MainWindow::on_btnConfirm_clicked()
     std::string modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
 
     if (selectedMode.contains("目标检测")) {
-        modelType = "YOLO11";
+        modelType = "YOLO";
         modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
     } 
+    else if (selectedMode.contains("特征点检测")) {
+        modelType = "YOLOPose";
+        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11n-pose.hbm";
+    }
 
     m_worker->switchModel(modelType, modelPath);
     

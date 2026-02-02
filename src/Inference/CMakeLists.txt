@@ -1,6 +1,7 @@
 add_library(lib_inference
 SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/Yolo11Infer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/YoloPose.cpp
 )
 
 target_include_directories(lib_inference

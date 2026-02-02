@@ -1,5 +1,6 @@
 #include "DetectionWorker.h"
 #include "Yolo11Infer.h"
+#include "YoloPose.h"
 #include <plog/Log.h>
 
 DetectionWorker::DetectionWorker(RTSPCamera* cam, QObject* parent)
@@ -42,11 +43,11 @@ void DetectionWorker::switchModel(const std::string& type, const std::string& pa
     std::lock_guard<std::mutex> lock(m_inferMtx);
     PLOGI << "Switching model to: " << type;
     
-    if (type == "YOLO11") {
+    if (type == "YOLO") {
         m_inferEngine = std::make_unique<Inf::Yolo11Infer>();
     } 
-    else if (type == "YOLO-POSE"){
-        // m_inferEngine = std::make_unique<Inf::LandmarkInfer>(); // 预留扩展
+    else if (type == "YOLOPose"){
+        m_inferEngine = std::make_unique<Inf::YoloPose>();
     }
 
     if (m_inferEngine && !m_inferEngine->init(path)) {
@@ -124,20 +125,13 @@ void DetectionWorker::inferenceLoop() {
         std::vector<Inf::Detection> results;
         {
             std::lock_guard<std::mutex> lock(m_inferMtx);
-            if (m_inferEngine) results = m_inferEngine->run(frame);
-        }
-
-        // --- 3. 绘制检测框 (此时 frame 变为带框画面) ---
-        for (const auto& det : results) {
-            cv::rectangle(frame, det.rect, cv::Scalar(0, 255, 0), 2);
-            if (det.track_id != -1) {
-                std::string txt = "ID:" + std::to_string(det.track_id);
-                cv::putText(frame, txt, cv::Point(det.rect.x, det.rect.y - 5), 
-                            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+            if (m_inferEngine) {
+                results = m_inferEngine->run(frame);
+                m_inferEngine->draw(frame, results);
             }
         }
 
-        // --- 4. 双路截图处理 ---
+        // --- 3. 双路截图处理 ---
         if (m_needSnapshot.load()) {
             std::string timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz").toStdString();
             cv::imwrite("snapshots/Raw_" + timeStr + ".jpg", oriFrame); // 保存原图
@@ -145,7 +139,7 @@ void DetectionWorker::inferenceLoop() {
             m_needSnapshot.store(false);
             PLOGI << "Dual Snapshots saved.";
         }
-
+        // --- 4. 双路录制处理 ---
         if (m_isInferRecording.load()) {
            if (m_inferRecordQueue.size() < 30) {
             m_inferRecordQueue.enqueue(frame.clone());

@@ -8,7 +8,7 @@ namespace Inf { // 必须包裹
 
 class Yolo11Infer : public BaseInfer {
 public:
-    Yolo11Infer() = default;
+    Yolo11Infer();
     ~Yolo11Infer() override;
 
     bool init(const std::string& model_path) override;
@@ -16,9 +16,13 @@ public:
     std::vector<Detection> run(cv::Mat& frame) override; 
     void cleanup() override;
 
+    void draw(cv::Mat& frame, const std::vector<Detection>& results) override;
+
 private:
     std::unique_ptr<YOLO11> m_yolo;
     std::unique_ptr<BYTETracker> m_tracker;
+
+    std::map<int, int> m_track_id_to_class;
 };
 
 } // namespace Inf

@@ -21,6 +21,7 @@ foreach(test_src ${TEST_FILES})
         hobot_utils      
         lib_common
         lib_sensor
+        lib_inference
         ${HOBOT_LINK_LIBS}
         ${OpenCV_LIBS}
         ${HIKSDK_LIBRARIES}

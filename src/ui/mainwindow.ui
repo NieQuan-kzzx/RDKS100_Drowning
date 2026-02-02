@@ -295,13 +295,13 @@
             <widget class="QComboBox" name="comboBoxModels">
              <property name="minimumSize">
               <size>
-               <width>101</width>
+               <width>121</width>
                <height>31</height>
               </size>
              </property>
              <property name="maximumSize">
               <size>
-               <width>101</width>
+               <width>121</width>
                <height>31</height>
               </size>
              </property>
@@ -318,22 +318,7 @@
              </item>
              <item>
               <property name="text">
-               <string>目标追踪</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
                <string>特征点检测</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>水位检测</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>溺水检测</string>
               </property>
              </item>
             </widget>
