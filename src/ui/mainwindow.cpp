@@ -140,6 +140,10 @@ void MainWindow::on_btnConfirm_clicked()
         modelType = "YOLOPose";
         modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11n-pose.hbm";
     }
+    else if (selectedMode.contains("进水检测")) {
+        modelType = "Patchcore";
+        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
+    }
 
     m_worker->switchModel(modelType, modelPath);
     

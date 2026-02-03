@@ -1,6 +1,7 @@
 #include "DetectionWorker.h"
 #include "Yolo11Infer.h"
 #include "YoloPose.h"
+#include "Patchcore.h"
 #include <plog/Log.h>
 
 DetectionWorker::DetectionWorker(RTSPCamera* cam, QObject* parent)
@@ -48,6 +49,9 @@ void DetectionWorker::switchModel(const std::string& type, const std::string& pa
     } 
     else if (type == "YOLOPose"){
         m_inferEngine = std::make_unique<Inf::YoloPose>();
+    }
+    else if (type == "Patchcore"){
+        m_inferEngine = std::make_unique<Inf::Patchcore>();
     }
 
     if (m_inferEngine && !m_inferEngine->init(path)) {

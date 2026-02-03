@@ -318,6 +318,11 @@
              </item>
              <item>
               <property name="text">
+               <string>进水检测</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
                <string>特征点检测</string>
               </property>
              </item>
