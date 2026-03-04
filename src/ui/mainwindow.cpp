@@ -32,7 +32,8 @@ MainWindow::~MainWindow()
 
 void MainWindow::initSystems()
 {
-    m_cam = new RTSPCamera("rtsp://admin:waterline123456@192.168.127.15", 1920, 1080, 10, 0, false);
+    // rtsp://admin:nuaa2026@192.168.127.15
+    m_cam = new RTSPCamera("rtsp://127.0.0.1/assets/swim_fixed.h264", 1920, 1080, 10, 0, false);
     m_pool = new ThreadPool(4);
     m_worker = new DetectionWorker(m_cam, this);
 
@@ -193,7 +194,7 @@ void MainWindow::updateUI(cv::Mat frame)
 QImage MainWindow::matToQImage(const cv::Mat& mat)
 {
     if (mat.type() == CV_8UC3) {
-        return QImage((const uchar*)mat.data, mat.cols, mat.rows, mat.step, QImage::Format_BGR888).rgbSwapped();
+        return QImage((const uchar*)mat.data, mat.cols, mat.rows, mat.step, QImage::Format_BGR888);
     } else if (mat.type() == CV_8UC1) {
         return QImage((const uchar*)mat.data, mat.cols, mat.rows, mat.step, QImage::Format_Grayscale8);
     }

@@ -8,7 +8,7 @@ STrack::STrack(vector<float> tlwh_, float score)
 	is_activated = false;
 	track_id = 0;
 	state = TrackState::New;
-	
+
 	tlwh.resize(4);
 	tlbr.resize(4);
 
