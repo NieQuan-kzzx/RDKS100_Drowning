@@ -43,20 +43,27 @@ void DetectionWorker::stop() {
 void DetectionWorker::switchModel(const std::string& type, const std::string& path) {
     std::lock_guard<std::mutex> lock(m_inferMtx);
     PLOGI << "Switching model to: " << type;
-    
+    std::unique_ptr<Inf::BaseInfer> nextEngine;
+
     if (type == "YOLO") {
+        nextEngine = std::make_unique<Inf::Yolo11Infer>();
+        nextEngine->setLabels({"person at surface", "person underwater"});
         m_inferEngine = std::make_unique<Inf::Yolo11Infer>();
     } 
-    else if (type == "YOLOPose"){
-        m_inferEngine = std::make_unique<Inf::YoloPose>();
+    else if (type == "SWIMMER"){
+        nextEngine = std::make_unique<Inf::Yolo11Infer>();
+        nextEngine->setLabels({"swimmer"});
+        m_inferEngine = std::make_unique<Inf::Yolo11Infer>();
     }
-    else if (type == "Patchcore"){
-        m_inferEngine = std::make_unique<Inf::Patchcore>();
-    }
+    // else if (type == "Patchcore"){
+    //     // auto engine = std::make_unique<Inf::Patchcore>();
+    //     // engine->setLabels({"normal", "defect"});
+    //     m_inferEngine = std::make_unique<Inf::Patchcore>();
+    // }
 
-    if (m_inferEngine && !m_inferEngine->init(path)) {
-        PLOGE << "Failed to init model: " << path;
-        m_inferEngine.reset();
+    if (nextEngine && nextEngine->init(path)) {
+        m_inferEngine = std::move(nextEngine);
+        PLOGI << "Model switched and labels injected.";
     }
 }
 

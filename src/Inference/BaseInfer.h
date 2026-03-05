@@ -28,5 +28,11 @@ namespace Inf {
         virtual std::vector<Detection> run(cv::Mat& frame) = 0; // 核心推理接口
         virtual void cleanup() = 0; // 资源清理接口
         virtual void draw(cv::Mat& frame, const std::vector<Detection>& results) = 0; // 绘图接口
+
+        virtual void setLabels(const std::vector<std::string>& labels) { m_labels = labels; };
+        virtual std::vector<std::string> getLabels() const { return m_labels; }; // 获取标签
+
+    protected:
+        std::vector<std::string> m_labels;
     };
 }

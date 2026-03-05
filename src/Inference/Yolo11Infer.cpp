@@ -1,20 +1,8 @@
 #include "Yolo11Infer.h"
+#include "common_utils.hpp"
 #include "PlogInitializer.h"
 
 namespace Inf { // 必须包裹
-
-// coco Name -- 80
-std::vector<std::string> object_names = {
-        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
-        "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
-        "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
-        "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
-        "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
-        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
-        "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
-        "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
-        "scissors", "teddy bear", "hair drier", "toothbrush"
-};
 
 Yolo11Infer::Yolo11Infer() {
     PlogInitializer::getInstance().init(plog::verbose);
@@ -25,11 +13,37 @@ Yolo11Infer::~Yolo11Infer() {
 }
 
 void Yolo11Infer::draw(cv::Mat& frame, const std::vector<Detection>& results) {
+    if (frame.empty()) return;
+
+    // --- 新增：根据画面宽度动态计算字号和粗细，防止在大图中太小 ---
+    // 基础字号 0.7，画面越宽，比例越大
+    double fontScale = frame.cols / 800.0; 
+    int thickness = std::max(1, (int)(frame.cols / 600)); 
+
     for (const auto& det : results) {
-        cv::rectangle(frame, det.rect, cv::Scalar(255, 128, 0), 2);
-        std::string txt = "ID:" + std::to_string(det.track_id) + " " + object_names[det.class_id];
-        cv::putText(frame, txt, cv::Point(det.rect.x, det.rect.y - 5), 
-                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 128, 0), 2);
+        // 使用 class_id 分配颜色
+        cv::Scalar color = rdk_colors[det.class_id % rdk_colors.size()];
+
+        // 获取标签名称
+        std::string label_name = (det.class_id < m_labels.size()) ? m_labels[det.class_id] : "unknown";
+        std::string txt = "ID:" + std::to_string(det.track_id) + " " + label_name;
+
+        // 1. 画矩形框 (线条加粗到 3)
+        cv::rectangle(frame, det.rect, color, 3);
+
+        // 2. 准备文字背景
+        int baseline = 0;
+        cv::Size text_size = cv::getTextSize(txt, cv::FONT_HERSHEY_SIMPLEX, fontScale, thickness, &baseline);
+        
+        // 文字背景框
+        cv::rectangle(frame, 
+                      cv::Point(det.rect.x, det.rect.y - text_size.height - 10),
+                      cv::Point(det.rect.x + text_size.width, det.rect.y),
+                      color, -1); 
+
+        // 3. 写字 (白色文字，使用动态计算的 fontScale 和 thickness)
+        cv::putText(frame, txt, cv::Point(det.rect.x, det.rect.y - 10), 
+                    cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(255, 255, 255), thickness, cv::LINE_AA);
     }
 }
 

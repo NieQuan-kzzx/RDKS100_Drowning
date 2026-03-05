@@ -130,16 +130,16 @@ void MainWindow::on_btnConfirm_clicked()
     if (!m_cam || !m_cam->isRunning()) return;
 
     QString selectedMode = ui->comboBoxModels->currentText();
-    std::string modelType = "YOLO11"; 
-    std::string modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
+    std::string modelType = "YOLO"; 
+    std::string modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm";
 
-    if (selectedMode.contains("目标检测")) {
+    if (selectedMode.contains("溺水检测")) {
         modelType = "YOLO";
-        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
+        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm";
     } 
-    else if (selectedMode.contains("特征点检测")) {
-        modelType = "YOLOPose";
-        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11n-pose.hbm";
+    else if (selectedMode.contains("游泳检测")) {
+        modelType = "SWIMMER";
+        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/swimmer.hbm";
     }
     else if (selectedMode.contains("进水检测")) {
         modelType = "Patchcore";

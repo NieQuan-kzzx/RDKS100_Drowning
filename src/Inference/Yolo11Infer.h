@@ -18,11 +18,15 @@ public:
 
     void draw(cv::Mat& frame, const std::vector<Detection>& results) override;
 
+    void setLabels(const std::vector<std::string>& labels) { m_labels = labels;}
+    std::vector<std::string> getLabels() const override { return m_labels; }
+
 private:
     std::unique_ptr<YOLO11> m_yolo;
     std::unique_ptr<BYTETracker> m_tracker;
 
     std::map<int, int> m_track_id_to_class;
+    std::vector<std::string> m_labels;
 };
 
 } // namespace Inf
