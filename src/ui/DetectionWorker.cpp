@@ -43,27 +43,34 @@ void DetectionWorker::stop() {
 void DetectionWorker::switchModel(const std::string& type, const std::string& path) {
     std::lock_guard<std::mutex> lock(m_inferMtx);
     PLOGI << "Switching model to: " << type;
+    
     std::unique_ptr<Inf::BaseInfer> nextEngine;
 
+    // 1. 根据类型创建实例
     if (type == "YOLO") {
-        nextEngine = std::make_unique<Inf::Yolo11Infer>();
-        nextEngine->setLabels({"person at surface", "person underwater"});
-        m_inferEngine = std::make_unique<Inf::Yolo11Infer>();
+        auto yolo = std::make_unique<Inf::Yolo11Infer>();
+        yolo->setLabels({"person at surface", "person underwater"});
+        nextEngine = std::move(yolo);
     } 
     else if (type == "SWIMMER"){
-        nextEngine = std::make_unique<Inf::Yolo11Infer>();
-        nextEngine->setLabels({"swimmer"});
-        m_inferEngine = std::make_unique<Inf::Yolo11Infer>();
+        auto yolo = std::make_unique<Inf::Yolo11Infer>();
+        yolo->setLabels({"swimmer"});
+        nextEngine = std::move(yolo);
     }
-    // else if (type == "Patchcore"){
-    //     // auto engine = std::make_unique<Inf::Patchcore>();
-    //     // engine->setLabels({"normal", "defect"});
-    //     m_inferEngine = std::make_unique<Inf::Patchcore>();
-    // }
+    else if (type == "Patchcore"){
+        nextEngine = std::make_unique<Inf::Patchcore>();
+        // 如果 Patchcore 也需要 labels，在这里 set
+    }
 
-    if (nextEngine && nextEngine->init(path)) {
-        m_inferEngine = std::move(nextEngine);
-        PLOGI << "Model switched and labels injected.";
+    // 2. 统一初始化
+    if (nextEngine) {
+        if (nextEngine->init(path)) {
+            // 只有初始化成功，才替换正在运行的引擎
+            m_inferEngine = std::move(nextEngine);
+            PLOGI << "Model switched successfully: " << type;
+        } else {
+            PLOGE << "Failed to initialize model: " << path;
+        }
     }
 }
 
@@ -73,8 +80,11 @@ void DetectionWorker::processLoop() {
     m_running.store(true);
 
     while (m_running.load()) {
+        if (!m_running.load()) break;
+
         if (m_isPaused.load()){
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (!m_running.load()) break;
             continue;
         }
         if (!m_cam || !m_cam->isRunning()) break;
@@ -119,7 +129,8 @@ void DetectionWorker::inferenceLoop() {
 
     while (m_is_infer_running.load()) {
         if (m_isPaused.load()){
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (!m_is_infer_running.load()) break;
             continue;
         }
 

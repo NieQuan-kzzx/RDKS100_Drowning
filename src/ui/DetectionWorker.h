@@ -40,6 +40,8 @@ public:
     // 推理线程是否正在运行
     bool isInferRunning() const { return m_is_infer_running.load(); }
 
+    bool isPaused() const { return m_isPaused.load(); }
+
 signals:
     void frameReady(cv::Mat frame);      // 源画面信号
     void inferFrameReady(cv::Mat frame); // 带推理框的画面信号

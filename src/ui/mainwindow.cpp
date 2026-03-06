@@ -89,14 +89,17 @@ void MainWindow::on_btnOpen_clicked() {
 }
 
 void MainWindow::on_btnClose_clicked() {
-    // 停止录制和工作流
-    handleRecording(false); // 确保录制安全关闭
-    m_worker->stop();
+    // 1. 立即停止所有工作位
+    m_worker->stop(); 
+    m_worker->setPaused(false); // 强制取消暂停状态，防止线程卡在暂停循环里
+    
     m_cam->stop();
+    handleRecording(false); 
 
-    updateButtonStates();
+    // 2. 重置按钮文字（解决点击两次的问题）
+    ui->btnPause->setText("暂停拍摄"); 
 
-    // 断开显示信号，清空 Label
+    // 3. UI 清理
     disconnect(m_worker, &DetectionWorker::frameReady, this, &MainWindow::updateUI);
     disconnect(m_worker, &DetectionWorker::inferFrameReady, nullptr, nullptr);
 
@@ -104,16 +107,19 @@ void MainWindow::on_btnClose_clicked() {
     ui->labelProcessed->clear();
     ui->labelOriginal->setText("摄像头已关闭");
     ui->labelProcessed->setText("推理已停止");
+    
+    updateButtonStates();
 }
 
 void MainWindow::on_btnPause_clicked()
 {
     if (!m_cam || !m_cam->isRunning()) return;
 
-    static bool isPaused = false;
-    isPaused = !isPaused;
-    m_worker->setPaused(isPaused);
-    ui->btnPause->setText(isPaused ? "恢复拍摄" : "暂停拍摄");
+    bool currentState = m_worker->isPaused();
+    bool newState = !currentState;
+
+    m_worker->setPaused(newState);
+    ui->btnPause->setText(newState ? "恢复拍摄" : "暂停拍摄");
 }
 
 void MainWindow::on_btnCapture_clicked()
