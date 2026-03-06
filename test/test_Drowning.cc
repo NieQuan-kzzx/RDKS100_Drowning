@@ -5,6 +5,8 @@
 #include <chrono>
 #include <deque>
 #include <iomanip>
+#include <map>
+#include <algorithm>
 
 #include "gflags/gflags.h"
 #include <opencv2/opencv.hpp>
@@ -13,177 +15,198 @@
 #include "common_utils.hpp"
 #include "BYTETracker.hpp"
 
+// --- 使用独立命名避免与 ByteTrack 冲突 ---
+struct DrowningTrackState {
+    std::deque<cv::Point2f> history_pos; 
+    int underwater_count = 0;           
+    bool is_drowned = false;            
+};
+
+class DrowningDetector {
+public:
+    DrowningDetector(float move_thr = 100.0f, int time_thr = 50)
+        : move_threshold(move_thr), time_threshold(time_thr) {}
+
+    void update(int track_id, cv::Point2f center, bool is_underwater) {
+        auto& state = manager[track_id];
+        state.history_pos.push_back(center);
+        if (state.history_pos.size() > 50) state.history_pos.pop_front();
+
+        float displacement = 100.0f; 
+        if (state.history_pos.size() >= 30) {
+            displacement = cv::norm(state.history_pos.back() - state.history_pos.front());
+        }
+
+        // 溺水判定逻辑：处于水下且位移极小
+        if (is_underwater && displacement < move_threshold) {
+            state.underwater_count++;
+        } else {
+            state.underwater_count = 0; 
+            state.is_drowned = false;
+        }
+
+        if (state.underwater_count >= time_threshold) {
+            state.is_drowned = true;
+        }
+    }
+
+    bool isDrowned(int track_id) {
+        auto it = manager.find(track_id);
+        return (it != manager.end()) && it->second.is_drowned;
+    }
+
+    void clean(const std::vector<int>& active_ids) {
+        for (auto it = manager.begin(); it != manager.end(); ) {
+            if (std::find(active_ids.begin(), active_ids.end(), it->first) == active_ids.end()) {
+                it = manager.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+private:
+    std::map<int, DrowningTrackState> manager;
+    float move_threshold;
+    int time_threshold;
+};
+
 // 参数定义
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm",
-              "Path to BPU Quantized *.hbm model file");
-DEFINE_string(test_img, "/home/sunrise/Desktop/test_bmp/1.jpg",
-              "Path to load the test image.");
-DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/swim_test.mp4",
-              "Path to input video file. If set, video mode will be used.");
-DEFINE_string(output_video, "result.mp4",
-              "Path to save processed output video.");
-DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_swim.names",
-              "Path to load ImageNet label mapping file.");
-DEFINE_double(score_thres, 0.25, "Confidence score threshold for filtering detections.");
-DEFINE_double(nms_thres, 0.7, "IoU threshold for Non-Maximum Suppression.");
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm", "Model file");
+DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/swim_test.mp4", "Input video");
+DEFINE_string(output_video, "drowning_result_2.mp4", "Output saved path");
+DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_swim.names", "Labels");
+DEFINE_double(score_thres, 0.25, "Score thres");
+DEFINE_double(nms_thres, 0.7, "NMS thres");
 
 int main(int argc, char **argv)
 {
-    // 解析命令行参数
-    gflags::SetUsageMessage(argv[0]);
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    // 导入模型
-    YOLO11 yolo11 = YOLO11(FLAGS_model_path);
-
-    // 导入类别名称
+    // 初始化模型和算法
+    YOLO11 yolo11(FLAGS_model_path);
     std::vector<std::string> class_names = load_linewise_labels(FLAGS_label_file);
-
-    // 初始化 ByteTrack
     BYTETracker tracker;
-    
-    // 视频处理模式
-    if (!FLAGS_input_video.empty())
-    {
-        cv::VideoCapture cap(FLAGS_input_video);
-        if (!cap.isOpened())
-        {
-            std::cerr << "Failed to open input video: " << FLAGS_input_video << std::endl;
-            return -1;
+    DrowningDetector drowning_checker(12.0f, 125); // 约5秒判定(25fps)
+
+    cv::VideoCapture cap(FLAGS_input_video);
+    if (!cap.isOpened()) {
+        std::cerr << "Cannot open video: " << FLAGS_input_video << std::endl;
+        return -1;
+    }
+
+    int frame_w = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+    int frame_h = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+    double fps = cap.get(cv::CAP_PROP_FPS);
+
+    cv::VideoWriter writer(FLAGS_output_video, cv::VideoWriter::fourcc('m','p','4','v'), 
+                           fps, cv::Size(frame_w, frame_h));
+
+    std::cout << "Starting processing (No GUI)..." << std::endl;
+
+    cv::Mat frame;
+    int frame_idx = 0;
+    auto total_start = std::chrono::steady_clock::now();
+
+    while (cap.read(frame)) {
+        if (frame.empty()) break;
+        frame_idx++;
+
+        // 1. 推理与检测
+        yolo11.pre_process(frame);
+        yolo11.infer();
+        auto detections = yolo11.post_process(FLAGS_score_thres, FLAGS_nms_thres, frame_w, frame_h);
+
+        // 2. 准备跟踪输入
+        std::vector<Object> objects;
+        for (auto &det : detections) {
+            Object o;
+            o.rect = cv::Rect_<float>(det.bbox[0], det.bbox[1], det.bbox[2]-det.bbox[0], det.bbox[3]-det.bbox[1]);
+            o.label = det.class_id;
+            o.prob = det.score;
+            objects.push_back(o);
         }
 
-        int frame_w = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-        int frame_h = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-        double video_fps = cap.get(cv::CAP_PROP_FPS);
-        if (video_fps <= 0) video_fps = 25.0;
+        // 3. 更新跟踪器
+        auto tracks = tracker.update(objects);
+        std::vector<int> active_ids;
+        bool global_drowning_alert = false;
 
-        // 视频写入初始化
-        cv::VideoWriter writer;
-        int fourcc = cv::VideoWriter::fourcc('m','p','4','v');
-        if (!FLAGS_output_video.empty())
-            writer.open(FLAGS_output_video, fourcc, video_fps, cv::Size(frame_w, frame_h));
+        // 4. 处理每一个跟踪对象
+        for (auto &t : tracks) {
+            if (!t.is_activated) continue;
+            active_ids.push_back(t.track_id);
 
-        cv::Mat frame;
-        int frame_idx = 0;
-        int max_id = 0;
-        
-        // FPS 相关
-        std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
-        std::deque<double> fps_history;
-        const int fps_history_size = 10;
-        
-        while (cap.read(frame))
-        {
-            frame_idx++;
-            if (frame.empty()) break;
+            cv::Rect track_rect((int)t.tlwh[0], (int)t.tlwh[1], (int)t.tlwh[2], (int)t.tlwh[3]);
+            bool is_underwater = false;
+            std::string label_name = "unknown";
 
-            auto frame_start = std::chrono::steady_clock::now();
-
-            int img_w = frame.cols;
-            int img_h = frame.rows;
-
-            // 1. 目标检测
-            yolo11.pre_process(frame);
-            yolo11.infer();
-            auto detections = yolo11.post_process(FLAGS_score_thres, FLAGS_nms_thres, img_w, img_h);
-            
-            // 2. 准备跟踪输入
-            std::vector<Object> objects;
-            for (auto &det : detections)
-            {
-                Object o;
-                float x1 = det.bbox[0];
-                float y1 = det.bbox[1];
-                float x2 = det.bbox[2];
-                float y2 = det.bbox[3];
-                o.rect = cv::Rect_<float>(x1, y1, x2 - x1, y2 - y1);
-                o.label = det.class_id;
-                o.prob = det.score;
-                objects.push_back(o);
-            }
-            
-            // 3. 更新跟踪器
-            auto tracks = tracker.update(objects);
-
-            // 4. 计算并平滑 FPS
-            auto frame_end = std::chrono::steady_clock::now();
-            std::chrono::duration<double> frame_duration = frame_end - frame_start;
-            double current_fps = 1.0 / frame_duration.count();
-            fps_history.push_back(current_fps);
-            if (fps_history.size() > fps_history_size) fps_history.pop_front();
-            double avg_fps = 0;
-            for (double f : fps_history) avg_fps += f;
-            avg_fps /= fps_history.size();
-            
-            // 5. 绘制结果
-            for (auto &t : tracks)
-            {
-                if (!t.is_activated) continue;
-
-                // 获取跟踪框坐标
-                cv::Rect track_rect((int)t.tlwh[0], (int)t.tlwh[1], (int)t.tlwh[2], (int)t.tlwh[3]);
-
-                // --- 修复点：通过 IoU 找回 label 名称 ---
-                std::string label_name = "unknown";
-                int best_class_id = -1;
-                float max_iou = 0.0f;
-
-                for (const auto& obj : objects) {
-                    cv::Rect inter = track_rect & cv::Rect((int)obj.rect.x, (int)obj.rect.y, (int)obj.rect.width, (int)obj.rect.height);
-                    if (inter.area() > 0) {
-                        float iou = (float)inter.area() / (track_rect.area() + (int)obj.rect.area() - inter.area());
-                        if (iou > max_iou) {
-                            max_iou = iou;
-                            best_class_id = obj.label;
+            // IoU 匹配回溯 YOLO 原始类别
+            for (const auto& obj : objects) {
+                cv::Rect det_rect((int)obj.rect.x, (int)obj.rect.y, (int)obj.rect.width, (int)obj.rect.height);
+                cv::Rect inter = track_rect & det_rect;
+                if (inter.area() > 0) {
+                    float iou = (float)inter.area() / (track_rect.area() + det_rect.area() - inter.area());
+                    if (iou > 0.6) { // 匹配阈值
+                        if (obj.label < class_names.size()) {
+                            label_name = class_names[obj.label];
+                            if (label_name.find("under") != std::string::npos) is_underwater = true;
                         }
                     }
                 }
-
-                if (best_class_id >= 0 && best_class_id < (int)class_names.size()) {
-                    label_name = class_names[best_class_id];
-                }
-                // ----------------------------------------
-
-                // 分配颜色并绘制
-                cv::Scalar col = tracker.get_color(t.track_id);
-                cv::rectangle(frame, track_rect, col, 2);
-                
-                std::string label_text = "ID:" + std::to_string(t.track_id) + " " + label_name;
-
-                // 绘制背景框和文字
-                int baseline = 0;
-                cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
-                cv::rectangle(frame, 
-                              cv::Point(track_rect.x, track_rect.y - text_size.height - 10),
-                              cv::Point(track_rect.x + text_size.width, track_rect.y),
-                              col, -1);
-
-                cv::putText(frame, label_text, cv::Point(track_rect.x, track_rect.y - 10),
-                            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
-
-                if (t.track_id > max_id) max_id = t.track_id;
             }
 
-            // 绘制 HUD 信息
-            std::ostringstream fps_ss, count_ss;
-            fps_ss << "FPS: " << std::fixed << std::setprecision(1) << avg_fps;
-            count_ss << "Now:" << objects.size() << "  Total:" << max_id;
+            // 更新溺水判定状态
+            cv::Point2f center(t.tlwh[0] + t.tlwh[2]/2, t.tlwh[1] + t.tlwh[3]/2);
+            drowning_checker.update(t.track_id, center, is_underwater);
 
-            cv::putText(frame, fps_ss.str(), cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
-            cv::putText(frame, count_ss.str(), cv::Point(frame.cols - 240, 30), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2);
+            // 绘制结果到离线帧
+            bool drowned = drowning_checker.isDrowned(t.track_id);
+            if (drowned) global_drowning_alert = true;
 
-            if (writer.isOpened()) writer.write(frame);
+            cv::Scalar color = drowned ? cv::Scalar(0, 0, 255) : tracker.get_color(t.track_id);
+            cv::rectangle(frame, track_rect, color, drowned ? 4 : 2);
 
-            if (frame_idx % 30 == 0) {
-                std::cout << "Processed " << frame_idx << " frames..." << std::endl;
-            }
+            std::string info = "ID:" + std::to_string(t.track_id) + " " + label_name;
+            
+            cv::putText(frame, info, cv::Point(track_rect.x, track_rect.y - 10), 
+                        cv::FONT_HERSHEY_SIMPLEX, 0.6, color, 2);
         }
 
-        std::cout << "\n======= Processing Complete =======" << std::endl;
-        if (writer.isOpened()) std::cout << "Saved video to: " << FLAGS_output_video << std::endl;
-        return 0;
+        if (global_drowning_alert) {
+            cv::Mat overlay = frame.clone();
+            cv::rectangle(overlay, cv::Point(0, 0), cv::Point(frame.cols, 80), cv::Scalar(0, 0, 255), -1);
+            cv::addWeighted(overlay, 0.4, frame, 0.6, 0, frame);
+
+            std::string warn_text = "WARNING: DROWNING DETECTED!";
+            int baseline = 0;
+            cv::Size text_size = cv::getTextSize(warn_text, cv::FONT_HERSHEY_DUPLEX, 1.5, 3, &baseline);
+            
+            cv::Point text_org((frame.cols - text_size.width) / 2, 55);
+            
+            cv::putText(frame, warn_text, text_org + cv::Point(2, 2), cv::FONT_HERSHEY_DUPLEX, 1.5, cv::Scalar(0, 0, 0), 3);
+            cv::putText(frame, warn_text, text_org, cv::FONT_HERSHEY_DUPLEX, 1.5, cv::Scalar(255, 255, 255), 3);
+        }
+
+        // 清理缓存
+        drowning_checker.clean(active_ids);
+
+        // 写入视频文件
+        if (writer.isOpened()) writer.write(frame);
+
+        if (frame_idx % 50 == 0) {
+            std::cout << "Processed frames: " << frame_idx << std::endl;
+        }
     }
 
-    std::cerr << "Error: No input video specified." << std::endl;
-    return -1;
+    auto total_end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> diff = total_end - total_start;
+    
+    std::cout << "\n--- Processing Finished ---" << std::endl;
+    std::cout << "Total frames: " << frame_idx << std::endl;
+    std::cout << "Time spent: " << diff.count() << " seconds" << std::endl;
+    std::cout << "Average Speed: " << (frame_idx / diff.count()) << " FPS" << std::endl;
+    std::cout << "Result saved to: " << FLAGS_output_video << std::endl;
+
+    return 0;
 }

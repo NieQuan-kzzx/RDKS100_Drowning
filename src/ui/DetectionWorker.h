@@ -11,6 +11,14 @@
 #include "BaseInfer.h"
 #include <opencv2/opencv.hpp>
 #include <filesystem>
+#include <deque>
+#include <map>
+
+struct DrowningTrackState {
+    std::deque<cv::Point2f> history_pos;
+    int underwater_count = 0;
+    bool is_drowned = false;
+};
 
 namespace fs = std::filesystem;
 
@@ -73,7 +81,12 @@ private:
     std::thread m_inferRecordThread;
     cv::VideoWriter m_inferVideoWriter;
     std::mutex m_inferWriterMtx;
-    void inferRecordLoop();
 
+    std::map<int, DrowningTrackState> m_drowningManager;
+    const float m_moveThreshold = 100.0f;
+    const int m_timeThreshold = 100;
+
+    void cleanDrowningTracks(const std::vector<int>& active_ids);
+    void inferRecordLoop();
     void initStorage();
 };
