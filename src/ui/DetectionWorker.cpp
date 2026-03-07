@@ -58,11 +58,12 @@ void DetectionWorker::switchModel(const std::string& type, const std::string& pa
     } 
     else if (type == "SWIMMER"){
         auto yolo = std::make_unique<Inf::Yolo11Infer>();
-        yolo->setLabels({"swimmer"});
+        yolo->setLabels({"drowning", "swimming"});
         nextEngine = std::move(yolo);
+        nextLogic = std::make_unique<SwimmingLogic>();
     }
     else if (type == "Patchcore"){
-        nextEngine = std::make_unique<Inf::Patchcore>();
+        nextEngine = std::make_unique<Inf::Patchcore>();  
     }
 
     if (nextEngine && nextEngine->init(path)) {

@@ -145,7 +145,7 @@ void MainWindow::on_btnConfirm_clicked()
     } 
     else if (selectedMode.contains("游泳检测")) {
         modelType = "SWIMMER";
-        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/swimmer.hbm";
+        modelPath = "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm";
     }
     else if (selectedMode.contains("进水检测")) {
         modelType = "Patchcore";
