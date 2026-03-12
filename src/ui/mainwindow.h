@@ -45,9 +45,11 @@ private:
     Ui::MainWindow *ui;
 
     // 核心组件
-    RTSPCamera      *m_cam    = nullptr;
+    RTSPCamera      *m_cam_1    = nullptr;
+    RTSPCamera      *m_cam_2    = nullptr;
     ThreadPool      *m_pool   = nullptr;
-    DetectionWorker *m_worker = nullptr;
+    DetectionWorker *m_worker_1 = nullptr;
+    DetectionWorker *m_worker_2 = nullptr;
 
     // 工具函数
     QImage matToQImage(const cv::Mat& mat);

@@ -14,7 +14,7 @@
 #include "BYTETracker.hpp"
 
 // 命令行参数定义
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm", "BPU模型文件路径");
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/s_PC-YOLO_UnderSurface.hbm", "BPU模型文件路径");
 DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/swim_test.mp4", "输入视频路径");
 DEFINE_string(output_video, "swim_result.mp4", "输出保存路径");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_swim.names", "标签文件路径");
