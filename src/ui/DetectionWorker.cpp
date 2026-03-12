@@ -8,8 +8,8 @@
 
 namespace fs = std::filesystem;
 
-DetectionWorker::DetectionWorker(RTSPCamera* cam, QObject* parent)
-    : QObject(parent), m_cam(cam), m_running(false), m_is_infer_running(false),
+DetectionWorker::DetectionWorker(RTSPCamera* cam,  int id, QObject* parent)
+    : QObject(parent), m_cam(cam), m_id(id), m_running(false), m_is_infer_running(false),
       m_isPaused(false), m_needSnapshot(false), m_isRecording(false), 
       m_is_processing(false), m_isInferRecording(false) {
         initStorage();
@@ -93,8 +93,7 @@ void DetectionWorker::processLoop() {
         emit frameReady(frame.clone());
 
         if (!m_is_infer_running.load() && m_needSnapshot.load()) {
-            std::string timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss").toStdString();
-            cv::imwrite("snapshots/Raw_" + timeStr + ".jpg", frame);
+            emit snapshotReady(frame.clone(), cv::Mat(), m_id);
             m_needSnapshot.store(false); 
         }
 
@@ -103,7 +102,7 @@ void DetectionWorker::processLoop() {
         }
 
         if (m_isRecording.load()) {
-            if (m_recordQueue.size() < 50) m_recordQueue.enqueue(frame.clone());
+            if (m_recordQueue.size() < 30) m_recordQueue.enqueue(frame.clone());
         }
     }
     m_is_processing.store(false);
@@ -143,9 +142,7 @@ void DetectionWorker::inferenceLoop() {
 
         // 处理截图和信号发送
         if (m_needSnapshot.load()) {
-            std::string timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz").toStdString();
-            cv::imwrite("snapshots/Raw_" + timeStr + ".jpg", oriFrame); 
-            cv::imwrite("snapshots/Infer_" + timeStr + ".jpg", frame);  
+            emit snapshotReady(oriFrame, frame.clone(), m_id); 
             m_needSnapshot.store(false);
         }
 
@@ -159,7 +156,6 @@ void DetectionWorker::inferenceLoop() {
 }
 
 // --- 录制相关控制 (保持原有逻辑) ---
-
 void DetectionWorker::setInferRecording(bool start, const std::string& path) {
     std::lock_guard<std::mutex> lock(m_inferWriterMtx);
     if (start) {
@@ -175,16 +171,15 @@ void DetectionWorker::setInferRecording(bool start, const std::string& path) {
     }
 }
 
-void DetectionWorker::setRecording(bool start, const std::string& path) {
+void DetectionWorker::setOriRecording(bool start, const std::string& path) {
     std::lock_guard<std::mutex> lock(m_writerMtx);
     if (start) {
         if (m_videoWriter.isOpened()) m_videoWriter.release();
         m_videoWriter.open(path, cv::VideoWriter::fourcc('M','J','P','G'), 25, cv::Size(1920, 1080));
         if (m_videoWriter.isOpened()) {
             m_isRecording.store(true);
-            if (!m_recordThread.joinable()) {
-                m_recordThread = std::thread(&DetectionWorker::recordLoop, this);
-            }
+            if (m_recordThread.joinable()) m_recordThread.detach();
+            m_recordThread = std::thread(&DetectionWorker::recordLoop, this);
         }
     } else {
         m_isRecording.store(false); 
@@ -192,6 +187,7 @@ void DetectionWorker::setRecording(bool start, const std::string& path) {
 }
 
 void DetectionWorker::recordLoop() {
+    PLOGI << "Record Thread Started.";
     while (m_isRecording.load() || !m_recordQueue.empty()) {
         cv::Mat f = m_recordQueue.dequeue();
         if (f.empty()) { std::this_thread::sleep_for(std::chrono::milliseconds(20)); continue; }

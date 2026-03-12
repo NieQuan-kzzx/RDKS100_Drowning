@@ -34,6 +34,8 @@ private slots:
     // UI 状态维护
     void updateButtonStates();
 
+    void handleSnapshot(cv::Mat raw, cv::Mat infer, int id);
+
 private:
     // 内部逻辑：处理录制开启/关闭
     void handleRecording(bool start); 

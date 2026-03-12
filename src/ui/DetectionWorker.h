@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 class DetectionWorker : public QObject {
     Q_OBJECT
 public:
-    explicit DetectionWorker(RTSPCamera* cam, QObject* parent = nullptr);
+    explicit DetectionWorker(RTSPCamera* cam,  int id, QObject* parent = nullptr);
     ~DetectionWorker();
 
     // 核心循环线程
@@ -35,7 +35,7 @@ public:
     void triggerSnapshot();
     
     // 录制控制
-    void setRecording(bool start, const std::string& path = "");      // 原始路录制
+    void setOriRecording(bool start, const std::string& path = "");      // 原始路录制
     void setInferRecording(bool start, const std::string& path = ""); // 推理路录制
     
     void startDualRecording(const std::string& timeStr);
@@ -51,6 +51,7 @@ public:
 signals:
     void frameReady(cv::Mat frame);      // 源画面信号
     void inferFrameReady(cv::Mat frame); // 最终处理画面信号（带框、带报警）
+    void snapshotReady(cv::Mat raw, cv::Mat infer, int id);
 
 private:
     // 基础组件
@@ -67,6 +68,8 @@ private:
     std::mutex m_inferMtx;                          // 保护引擎和逻辑的切换安全
     
     ThreadSafeQueue<cv::Mat> m_inferQueue; 
+
+    int m_id;
 
     // 录制相关：原始流
     std::atomic<bool> m_isRecording;

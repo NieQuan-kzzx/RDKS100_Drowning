@@ -2,6 +2,7 @@
 #include "./ui_mainwindow.h"
 #include <QTimer>
 #include <QDateTime>
+#include <QDir>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -21,6 +22,9 @@ MainWindow::MainWindow(QWidget *parent)
     // 绑定录制按钮点击事件
     connect(ui->radioStartRecord, &QRadioButton::clicked, this, [this](){ handleRecording(true); });
     connect(ui->radioStopRecord, &QRadioButton::clicked, this, [this](){ handleRecording(false); });
+
+    connect(m_worker_1, &DetectionWorker::snapshotReady, this, &MainWindow::handleSnapshot);
+    connect(m_worker_2, &DetectionWorker::snapshotReady, this, &MainWindow::handleSnapshot);
 }
 
 MainWindow::~MainWindow()
@@ -40,8 +44,8 @@ void MainWindow::initSystems()
     m_cam_1 = new RTSPCamera("rtsp://admin:nuaa2026@192.168.127.15", 1920, 1080, 10, 0, false);
     m_cam_2 = new RTSPCamera("rtsp://127.0.0.1/assets/swim_fixed.h264", 1920, 1080, 10, 0, false);
     m_pool = new ThreadPool(4);
-    m_worker_1 = new DetectionWorker(m_cam_1, this);
-    m_worker_2 = new DetectionWorker(m_cam_2, this);
+    m_worker_1 = new DetectionWorker(m_cam_1, 1, this);
+    m_worker_2 = new DetectionWorker(m_cam_2, 2, this);
 
     // 初始按钮状态刷新
     updateButtonStates();
@@ -61,8 +65,8 @@ void MainWindow::handleRecording(bool start)
         QString inferPath_1 = "records/Infer_1_" + timeStr + ".avi";
         QString rawPath_2 = "records/Raw_2_" + timeStr + ".avi";
         QString inferPath_2 = "records/Infer_2_" + timeStr + ".avi";
-        m_worker_1->setRecording(true, rawPath_1.toStdString());
-        m_worker_2->setRecording(true, rawPath_2.toStdString());
+        m_worker_1->setOriRecording(true, rawPath_1.toStdString());
+        m_worker_2->setOriRecording(true, rawPath_2.toStdString());
 
         // 2. 如果推理正在运行，同时启动推理路录制
         if (m_worker_1->isInferRunning()) {    
@@ -83,7 +87,7 @@ void MainWindow::handleRecording(bool start)
 
         //     // 1. 原始路录制
         //     QString rawPath = QString("records/%1_Raw_%2.avi").arg(prefix).arg(timeStr);
-        //     worker->setRecording(true, rawPath.toStdString());
+        //     worker->setOriRecording(true, rawPath.toStdString());
 
         //     // 2. 推理路录制
         //     if (worker->isInferRunning()) {
@@ -99,13 +103,40 @@ void MainWindow::handleRecording(bool start)
         // ui->statusbar->showMessage("已开始录制", 3000);
     } else {
         // 关闭所有录制
-        m_worker_1->setRecording(false);
+        m_worker_1->setOriRecording(false);
         m_worker_1->setInferRecording(false);
-        m_worker_2->setRecording(false);
+        m_worker_2->setOriRecording(false);
         m_worker_2->setInferRecording(false);
         ui->statusbar->showMessage("已停止所有录制", 3000);
     }
 }
+
+void MainWindow::handleSnapshot(cv::Mat raw, cv::Mat infer, int id) {
+    // 1. 准备目录
+    QString dirPath = "./snapshots/";
+    QDir dir;
+    if (!dir.exists(dirPath)) {
+        dir.mkpath(dirPath); 
+    }
+
+    // 2. 获取时间戳
+    QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz");
+
+    // 3. 保存原始图 (Raw)
+    if (!raw.empty()) {
+        std::string rawName = QString("%1Cam%2_Raw_%3.jpg")
+                                .arg(dirPath).arg(id).arg(timeStr).toStdString();
+        cv::imwrite(rawName, raw);
+    }
+
+    // 4. 保存推理图 (Infer)
+    if (!infer.empty()) {
+        std::string inferName = QString("%1Cam%2_Infer_%3.jpg")
+                                  .arg(dirPath).arg(id).arg(timeStr).toStdString();
+        cv::imwrite(inferName, infer);
+    }
+}
+
 
 // ---------------- 按钮逻辑实现 ----------------
 
@@ -205,8 +236,8 @@ void MainWindow::on_btnCapture_clicked()
     if (!m_cam_1 || !m_cam_1->isRunning()) return;
 
     // Worker 内部会自动判断单路或双路截图
-    m_worker_1->triggerSnapshot(); 
-    m_worker_2->triggerSnapshot(); 
+    if(m_worker_1) m_worker_1->triggerSnapshot();
+    if(m_worker_2) m_worker_2->triggerSnapshot();
     ui->statusbar->showMessage("截图指令已发送", 2000);
 }
 
