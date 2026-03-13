@@ -1,5 +1,5 @@
 #pragma once 
-#pragma once
+
 #include <opencv2/opencv.hpp>
 #include "BaseInfer.h"
 #include <map>

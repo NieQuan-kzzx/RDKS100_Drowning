@@ -25,6 +25,7 @@ PRIVATE
     lib_common
     lib_sensor
     lib_inference
+    lib_logic
 PUBLIC
     Qt::Widgets
 )

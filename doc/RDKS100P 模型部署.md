@@ -150,7 +150,7 @@
 ## 其他PTQ转化工具：
 
 - hb_verifier: 一致性验证工具，两模型之间的余弦相似度对比、输出一致性对比、余弦相似度越接近1，说明对比的两个量化模型的输出越接近。一致性对比会打印对比模型的输出一致性信息，包括输出名称、一致性、不一致元素数量、最大绝对误差、最大相对误差
-- ![image-20260119211116659](C:\Users\86159\AppData\Roaming\Typora\typora-user-images\image-20260119211116659.png)
+- ![pic/pic1.png](../pic/pic1.png)
 - hb_eval_preprocess: 用于对模型精度进行评估时，在x86环境下对图片数据进行预处理。
 - hb_config_generator: 用于支持您获取模型编译最简yaml配置文件、包含全部参数默认值的yaml配置文件的工具。
   - hb_config_generator --simple-yaml：生成嘴贱yaml配置文件

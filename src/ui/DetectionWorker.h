@@ -77,6 +77,7 @@ private:
     std::thread m_recordThread;
     cv::VideoWriter m_videoWriter;
     std::mutex m_writerMtx;
+    std::string m_OripendingRecordPath;
     void recordLoop();
 
     // 录制相关：推理/业务流
@@ -85,6 +86,7 @@ private:
     std::thread m_inferRecordThread;
     cv::VideoWriter m_inferVideoWriter;
     std::mutex m_inferWriterMtx;
+    std::string m_InferpendingRecordPath;
     void inferRecordLoop();
 
     void initStorage();
