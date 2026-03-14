@@ -20,7 +20,7 @@ void DrowningState::process(cv::Mat& frame, const std::vector<Inf::Detection>& r
             dist = cv::norm(state.history_pos.back() - state.history_pos.front());
         }
 
-        if (det.class_id == 1 && dist < m_moveThreshold) {
+        if (det.class_id == 0 && dist < m_moveThreshold) {
             state.underwater_count++;
         } else {
             state.underwater_count = 0;
