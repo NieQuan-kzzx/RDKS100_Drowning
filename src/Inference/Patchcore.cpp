@@ -5,12 +5,24 @@
 
 namespace Inf {
 
-Patchcore::Patchcore() {
+// 内存池键名常量定义
+const std::string Patchcore::PREPROCESS_RGB_KEY = "preprocess_rgb";
+const std::string Patchcore::PREPROCESS_YUV_KEY = "preprocess_yuv";
+
+Patchcore::Patchcore()
+    : m_matPool(MatPoolManager::getPool(cv::Size(224, 224), CV_8UC3)) {
     PlogInitializer::getInstance().init(plog::verbose);
+
+    // 预分配固定尺寸的Mat
+    resized_rgb_ = m_matPool.getMat(cv::Size(224, 224), CV_8UC3);
+    yuv420p_ = m_matPool.getMat(cv::Size(224, 224 * 3 / 2), CV_8UC1);
 }
 
 Patchcore::~Patchcore() {
     cleanup();
+    // 归还预分配的Mat到内存池
+    m_matPool.returnMat(resized_rgb_);
+    m_matPool.returnMat(yuv420p_);
 }
 
 bool Patchcore::init(const std::string& model_path) {
@@ -69,7 +81,7 @@ void Patchcore::setupTensors() {
 }
 
 void Patchcore::preprocess(const cv::Mat& bgr) {
-    // 1. 颜色空间转换与缩放
+    // 1. 使用预分配的Mat进行颜色空间转换与缩放，避免重复创建
     cv::cvtColor(bgr, resized_rgb_, cv::COLOR_BGR2RGB);
     cv::resize(resized_rgb_, resized_rgb_, cv::Size(224, 224));
     cv::cvtColor(resized_rgb_, yuv420p_, cv::COLOR_RGB2YUV_I420);
@@ -124,14 +136,15 @@ void Patchcore::draw(cv::Mat& frame, const std::vector<Detection>& results) {
 
     double minV, maxV;
     cv::minMaxLoc(m_current_amap, &minV, &maxV);
-    
+
+    // 简化：不使用内存池进行临时操作，避免生命周期管理复杂性
     cv::Mat amap_8u;
     m_current_amap.convertTo(amap_8u, CV_8UC1, 255.0/std::max(1e-5, maxV - minV), -minV*255.0/std::max(1e-5, maxV - minV));
-    
+
     cv::Mat color_map;
     cv::applyColorMap(amap_8u, color_map, cv::COLORMAP_JET);
     cv::resize(color_map, color_map, frame.size());
-    
+
     cv::addWeighted(frame, 0.7, color_map, 0.3, 0, frame);
 
     std::string label = (results[0].score > threshold_) ? "ALARM: LEAK" : "Normal";

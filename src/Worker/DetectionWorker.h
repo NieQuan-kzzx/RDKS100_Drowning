@@ -13,6 +13,7 @@
 #include "RTSPCamera.h"
 #include "ThreadSafeQueue.h"
 #include "BaseInfer.h"
+#include "MatPool.h"
 
 // 前置声明，减少头文件耦合
 class LogicBase; 
@@ -33,6 +34,7 @@ public:
     void setPaused(bool p);
     void stop();
     void triggerSnapshot();
+    void printPerformanceReport();
     
     // 录制控制
     void setOriRecording(bool start, const std::string& path = "");      // 原始路录制
@@ -61,6 +63,9 @@ private:
     std::atomic<bool> m_is_processing;
     std::atomic<bool> m_is_infer_running;
     std::atomic<bool> m_needSnapshot;
+
+    // 内存池优化 - 仅用于性能统计，不用于实际Mat分配
+    MatPool& m_matPool;
     
     // 推理引擎与业务逻辑 (核心解耦部分)
     std::unique_ptr<Inf::BaseInfer> m_inferEngine; 
@@ -90,4 +95,9 @@ private:
     void inferRecordLoop();
 
     void initStorage();
+
+    // 内存池键名常量
+    static const std::string FRAME_CLONE_KEY;
+    static const std::string RESIZE_1280x720_KEY;
+    static const std::string SHARED_FRAME_KEY;
 };

@@ -11,10 +11,16 @@
 
 namespace fs = std::filesystem;
 
+// 内存池键名常量定义
+const std::string DetectionWorker::FRAME_CLONE_KEY = "frame_clone";
+const std::string DetectionWorker::RESIZE_1280x720_KEY = "resize_1280x720";
+const std::string DetectionWorker::SHARED_FRAME_KEY = "shared_frame";
+
 DetectionWorker::DetectionWorker(RTSPCamera* cam,  int id, QObject* parent)
     : QObject(parent), m_cam(cam), m_id(id), m_running(false), m_is_infer_running(false),
-      m_isPaused(false), m_needSnapshot(false), m_isRecording(false), 
-      m_is_processing(false), m_isInferRecording(false) {
+      m_isPaused(false), m_needSnapshot(false), m_isRecording(false),
+      m_is_processing(false), m_isInferRecording(false),
+      m_matPool(MatPoolManager::getInstance()) {
         initStorage();
       }
 
@@ -94,12 +100,11 @@ void DetectionWorker::processLoop() {
         }
 
         auto shareFrame = std::make_shared<cv::Mat>(frame);
-
         emit frameReady(*shareFrame);
 
         if (!m_is_infer_running.load() && m_needSnapshot.load()) {
             emit snapshotReady(frame.clone(), cv::Mat(), m_id);
-            m_needSnapshot.store(false); 
+            m_needSnapshot.store(false);
         }
 
         if (m_is_infer_running.load() && m_inferQueue.size() < 2) {
@@ -109,9 +114,8 @@ void DetectionWorker::processLoop() {
         if (m_isRecording.load()) {
             if (m_recordQueue.size() < 30) {
                 cv::Mat smallFrame;
-                // 缩放到 720P 或者更低（如 640x360），性能提升显著
-                cv::resize(frame, smallFrame, cv::Size(1280, 720)); 
-                m_recordQueue.enqueue(smallFrame); 
+                cv::resize(frame, smallFrame, cv::Size(1280, 720));
+                m_recordQueue.enqueue(smallFrame);
             }
         }
 
@@ -167,7 +171,7 @@ void DetectionWorker::inferenceLoop() {
 
         // 处理截图和信号发送
         if (m_needSnapshot.load()) {
-            emit snapshotReady(oriFrame, frame.clone(), m_id); 
+            emit snapshotReady(oriFrame, frame.clone(), m_id);
             m_needSnapshot.store(false);
         }
 
@@ -250,6 +254,8 @@ void DetectionWorker::recordLoop() {
         m_videoWriter.write(f);
 
         // 4. 显式释放内存，防止队列积压导致内存溢出
+        // Check if this Mat came from our pool and return it
+        // Note: This is a simplified approach - in practice, we'd need a way to track pool Mats
         f.release();
     }
 
@@ -304,3 +310,7 @@ void DetectionWorker::inferRecordLoop() {
 
 void DetectionWorker::setPaused(bool p) { m_isPaused.store(p); }
 void DetectionWorker::triggerSnapshot() { m_needSnapshot.store(true); }
+
+void DetectionWorker::printPerformanceReport() {
+    m_matPool.printStats();
+}

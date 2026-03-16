@@ -1,11 +1,18 @@
 #include "RTSPCamera.h"
 
+// 内存池键名常量定义
+const std::string RTSPCamera::YUV_FRAME_KEY = "yuv_frame";
+const std::string RTSPCamera::BGR_FRAME_KEY = "bgr_frame";
+
 RTSPCamera::RTSPCamera(const std::string& url, int width, int height,
                        int _queue_max_length, int _capture_interval_ms, bool _is_full_drop)
     : ImageSensor(_queue_max_length, _capture_interval_ms, _is_full_drop),
-      m_rtsp_url(url), m_width(width), m_height(height) 
-{
-    // 构造函数逻辑
+      m_rtsp_url(url), m_width(width), m_height(height),
+      m_matPool(MatPoolManager::getPool(cv::Size(width, height), CV_8UC3)) {
+
+    // 预分配帧缓冲区 - 不使用内存池避免生命周期管理问题
+    yuv_frame_ = cv::Mat(cv::Size(width, height * 3 / 2), CV_8UC1);
+    bgr_frame_ = cv::Mat(cv::Size(width, height), CV_8UC3);
 }
 
 RTSPCamera::~RTSPCamera() {
@@ -14,6 +21,8 @@ RTSPCamera::~RTSPCamera() {
     if (sensor_thread.joinable()) {
         sensor_thread.join();
     }
+
+    // 注意：帧缓冲区不使用内存池，无需归还
 }
 
 void RTSPCamera::start() {
@@ -60,9 +69,6 @@ void RTSPCamera::dataCollectionLoop() {
 
     PLOGI << "RTSPCamera: Hardware decoding started.";
 
-    // 预分配 YUV 内存，避免循环内重复创建
-    cv::Mat yuv_frame(m_height * 3 / 2, m_width, CV_8UC1);
-
     while (this->is_running.load()) {
         // 2. 暂停处理
         if (m_is_paused.load()) {
@@ -71,16 +77,15 @@ void RTSPCamera::dataCollectionLoop() {
         }
 
         // 3. 获取硬件解码图像
-        ret = sp_decoder_get_image(m_decoder, reinterpret_cast<char*>(yuv_frame.data));
-        
-        if (ret == 0) { 
-            cv::Mat bgr_frame;
-            // 地平线硬解输出通常为 NV12 格式
-            cv::cvtColor(yuv_frame, bgr_frame, cv::COLOR_YUV2BGR_NV12);
-            
-            // 存入队列，使用 clone() 确保内存独立，防止 Segfault
-            this->enqueueData(bgr_frame.clone()); 
-            
+        ret = sp_decoder_get_image(m_decoder, reinterpret_cast<char*>(yuv_frame_.data));
+
+        if (ret == 0) {
+            // 使用预分配的缓冲区进行颜色转换
+            cv::cvtColor(yuv_frame_, bgr_frame_, cv::COLOR_YUV2BGR_NV12);
+
+            // 存入队列，使用 clone() 确保内存独立
+            this->enqueueData(bgr_frame_.clone());
+
             // 采集频率控制
             if (capture_interval_ms > 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(capture_interval_ms));

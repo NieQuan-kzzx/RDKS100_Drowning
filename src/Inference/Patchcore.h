@@ -3,6 +3,7 @@
 #include <memory>
 #include "hobot/dnn/hb_dnn.h"
 #include "hobot/hb_ucp.h"
+#include "MatPool.h"
 
 namespace Inf {
 class Patchcore : public BaseInfer {
@@ -28,10 +29,17 @@ private:
     // 算法参数与缓存
     float threshold_ = 50.0f;
     cv::Mat m_current_amap; // 缓存热力图用于 draw 接口
-    
+
+    // 内存池优化
+    MatPool& m_matPool;
+
     // 预分配中间变量，避免 run 循环中重复申请内存
     cv::Mat resized_rgb_;
     cv::Mat yuv420p_;
+
+    // 内存池键名常量
+    static const std::string PREPROCESS_RGB_KEY;
+    static const std::string PREPROCESS_YUV_KEY;
 
 };
 } // namespace Inf

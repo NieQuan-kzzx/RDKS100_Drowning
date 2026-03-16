@@ -4,6 +4,7 @@
 #include <string>
 #include <atomic>
 #include "sp_codec.h"
+#include "MatPool.h"
 
 
 class RTSPCamera : public ImageSensor
@@ -41,6 +42,17 @@ private:
     std::string m_rtsp_url;
     int m_width;
     int m_height;
+
+    // 内存池引用 - 仅用于性能统计
+    MatPool& m_matPool;
+
+    // 帧缓冲区 - 不使用内存池避免生命周期管理复杂性
+    cv::Mat yuv_frame_;
+    cv::Mat bgr_frame_;
+
+    // 内存池键名常量
+    static const std::string YUV_FRAME_KEY;
+    static const std::string BGR_FRAME_KEY;
 
     // 状态控制
     std::atomic<bool> m_is_paused{false};
