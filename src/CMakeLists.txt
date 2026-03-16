@@ -6,6 +6,7 @@ add_subdirectory(common)
 add_subdirectory(sensor)
 add_subdirectory(Inference)
 add_subdirectory(Logic)
+add_subdirectory(Worker)
 
 # 2. 定义可执行程序
 add_executable(RDKS100_Drowning 
@@ -28,6 +29,7 @@ PRIVATE
     lib_ui
     lib_inference
     lib_logic
+    lib_worker
     hobot_utils
     ${HOBOT_LINK_LIBS}
     ${OpenCV_LIBS}

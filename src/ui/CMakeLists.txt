@@ -9,7 +9,6 @@ add_library(lib_ui
 SHARED 
     mainwindow.cpp
     mainwindow.ui
-    DetectionWorker.cpp
 )
 
 target_include_directories(lib_ui 
@@ -26,6 +25,7 @@ PRIVATE
     lib_sensor
     lib_inference
     lib_logic
+    lib_worker
 PUBLIC
     Qt::Widgets
 )
