@@ -18,12 +18,12 @@ ImageSensor::~ImageSensor()
 
 void ImageSensor::start()
 {
+    // 基类逻辑改为：仅设置状态，不直接创建线程
+    // 或者完全交由派生类实现
     if (this->is_running.load() == false)
     {
         this->is_running.store(true);
-        PLOGI << "ImageSensor Start!";
-        this->sensor_thread = std::thread(&ImageSensor::dataCollectionLoop, this);
-        this->sensor_thread.detach();
+        PLOGI << "ImageSensor State: Running";
     }
 }
 
@@ -33,9 +33,11 @@ void ImageSensor::stop()
         return;
 
     this->is_running.store(false);
-    cv.notify_all();
-    // if (this->sensor_thread.joinable())
-    //     sensor_thread.join();
+    
+    // 这里的 join 逻辑要小心，确保线程确实是由这里管理的
+    if (this->sensor_thread.joinable()) {
+        this->sensor_thread.join();
+    }
     PLOGI << "ImageSensor Stop!";
 }
 

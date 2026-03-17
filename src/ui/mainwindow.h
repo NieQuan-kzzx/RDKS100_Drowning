@@ -9,7 +9,7 @@
 // 包含你的自定义类
 #include "RTSPCamera.h"
 #include "ThreadPool.h"
-#include "DetectionWorker.h"
+#include "DetectionCoordinator.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -47,11 +47,11 @@ private:
     Ui::MainWindow *ui;
 
     // 核心组件
-    RTSPCamera      *m_cam_1    = nullptr;
-    RTSPCamera      *m_cam_2    = nullptr;
-    ThreadPool      *m_pool   = nullptr;
-    DetectionWorker *m_worker_1 = nullptr;
-    DetectionWorker *m_worker_2 = nullptr;
+    RTSPCamera           *m_cam_1    = nullptr;
+    RTSPCamera           *m_cam_2    = nullptr;
+    ThreadPool           *m_pool   = nullptr;
+    DetectionCoordinator *m_coordinator_1 = nullptr;
+    DetectionCoordinator *m_coordinator_2 = nullptr;
 
     // 工具函数
     QImage matToQImage(const cv::Mat& mat);

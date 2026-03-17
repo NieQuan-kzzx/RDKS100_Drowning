@@ -56,7 +56,8 @@ private:
 
     // 状态控制
     std::atomic<bool> m_is_paused{false};
-    
+    std::mutex m_start_mutex;  // 用于start/stop同步
+
     // 录制相关
     std::atomic<bool> m_is_recording{false};
     cv::VideoWriter m_video_writer;

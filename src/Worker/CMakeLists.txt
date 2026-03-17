@@ -7,7 +7,10 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
 add_library(lib_worker
 SHARED
-    ${CMAKE_CURRENT_SOURCE_DIR}/DetectionWorker.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/DetectionCoordinator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/VideoCaptureManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/AIInferenceManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/RecordingManager.cpp
 )
 
 target_include_directories(lib_worker

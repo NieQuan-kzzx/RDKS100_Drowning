@@ -26,30 +26,47 @@ RTSPCamera::~RTSPCamera() {
 }
 
 void RTSPCamera::start() {
-    if (this->is_running.load()) {
-        PLOGI << "RTSPCamera: Already running.";
-        return;
-    }
+    std::lock_guard<std::mutex> lock(m_start_mutex);
 
-    // 1. 调用基类的 clear() 清空旧图像队列
-    this->clear(); 
+    if (this->is_running.load()) return;
 
-    this->is_running.store(true);
-
-    // 2. 检查基类的 sensor_thread 是否还在运行，确保安全回收
+    // --- 关键修改：强制重置线程对象 ---
     if (sensor_thread.joinable()) {
         sensor_thread.join();
     }
+    // 显式移动赋值一个空对象，确保旧句柄被彻底释放
+    sensor_thread = std::thread(); 
 
-    // 3. 启动采集线程
-    sensor_thread = std::thread(&RTSPCamera::dataCollectionLoop, this);
-    PLOGI << "RTSPCamera: Data collection thread started.";
+    this->clear(); 
+    this->is_running.store(true);
+
+    // 启动前稍微等待一下硬件驱动彻底冷却
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    try {
+        sensor_thread = std::thread(&RTSPCamera::dataCollectionLoop, this);
+        PLOGI << "RTSPCamera: Data collection thread started. ID: " << sensor_thread.get_id();
+    } catch (const std::exception& e) {
+        PLOGE << "Failed to create thread: " << e.what();
+        this->is_running.store(false);
+    }
 }
 
 void RTSPCamera::stop() {
-    // 改变标志位，让 dataCollectionLoop 退出
+    // 避免重复停止
+    if (!this->is_running.load()) return;
+
+    // 1. 改变标志位，让 dataCollectionLoop 退出循环
     this->is_running.store(false);
     PLOGI << "RTSPCamera: Stop signal sent.";
+
+    // 2. 等待线程结束
+    // 这里非常重要：因为 dataCollectionLoop 里面有硬解资源释放，
+    // 必须等待它执行完，才能返回。
+    if (sensor_thread.joinable()) {
+        sensor_thread.join();
+        PLOGI << "RTSPCamera: Thread joined safely.";
+    }
 }
 
 void RTSPCamera::pause() { m_is_paused.store(true); }
@@ -84,7 +101,12 @@ void RTSPCamera::dataCollectionLoop() {
             cv::cvtColor(yuv_frame_, bgr_frame_, cv::COLOR_YUV2BGR_NV12);
 
             // 存入队列，使用 clone() 确保内存独立
-            this->enqueueData(bgr_frame_.clone());
+            // this->enqueueData(bgr_frame_.clone());
+            cv::Mat poolMat = m_matPool.getMat(); 
+            if(!poolMat.empty()){
+                cv::cvtColor(yuv_frame_, poolMat, cv::COLOR_YUV2BGR_NV12);
+                this->enqueueData(poolMat); // ImageSensor 内部应负责处理 poolMat 的生命周期
+            }
 
             // 采集频率控制
             if (capture_interval_ms > 0) {
