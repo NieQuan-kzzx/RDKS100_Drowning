@@ -84,7 +84,7 @@ void AIInferenceManager::startInference() {
         PLOGW << "AIInferenceManager: Already running, ignoring start request";
         return;
     }
-
+    // 这里会出现一个INFO的错误误导日志，但实际上是正常的：因为如果没有加载模型，线程会立即退出，这时我们不应该认为是“失败”，而是正常的“无模型可运行”状态。
     if (!m_inferEngine) {
         PLOGE << "AIInferenceManager: Cannot start - No inference engine loaded!";
         return;

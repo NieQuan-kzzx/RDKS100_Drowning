@@ -87,16 +87,15 @@ void RTSPCamera::dataCollectionLoop() {
     PLOGI << "RTSPCamera: Hardware decoding started.";
 
     while (this->is_running.load()) {
-        // 2. 暂停处理
-        if (m_is_paused.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            continue;
-        }
-
-        // 3. 获取硬件解码图像
+        // 获取硬件解码图像
         ret = sp_decoder_get_image(m_decoder, reinterpret_cast<char*>(yuv_frame_.data));
 
         if (ret == 0) {
+            if (m_is_paused.load()) {
+                this->clear();
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                continue;
+            }
             // 使用预分配的缓冲区进行颜色转换
             cv::cvtColor(yuv_frame_, bgr_frame_, cv::COLOR_YUV2BGR_NV12);
 

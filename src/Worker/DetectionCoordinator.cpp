@@ -63,16 +63,36 @@ void DetectionCoordinator::stop() {
 
     PLOGI << "DetectionCoordinator: Stopping system...";
 
-    // 停止所有组件
-    m_captureManager->stopCapture();
-    m_inferenceManager->stopInference();
+    if (m_isPaused.load()) {
+        setPaused(false);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
     m_recordingManager->stopAllRecording();
+    m_inferenceManager->stopInference();
+    m_captureManager->stopCapture();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     m_isRunning.store(false);
     PLOGI << "DetectionCoordinator: System stopped";
 }
 
+void DetectionCoordinator::onRecordingStarted() {
+    m_recordingActive.store(true);
+    PLOGI << "DetectionCoordinator: Recording started, frame distribution optimized";
+}
+
+void DetectionCoordinator::onRecordingStopped() {
+    m_recordingActive.store(false);
+    PLOGI << "DetectionCoordinator: Recording stopped, frame distribution optimized";
+}
+
 void DetectionCoordinator::setPaused(bool paused) {
+    if (!m_isRunning.load()) {
+        PLOGW << "DetectionCoordinator: Cannot pause/resume - system not running";
+        return;
+    }
     m_isPaused.store(paused);
 
     // 暂停所有组件
@@ -150,8 +170,12 @@ void DetectionCoordinator::setupConnections() {
     // 连接录制信号
     connect(m_recordingManager.get(), &RecordingManager::recordingStarted,
             this, &DetectionCoordinator::recordingStarted);
+    connect(m_recordingManager.get(), &RecordingManager::recordingStarted,
+            this, &DetectionCoordinator::onRecordingStarted);
     connect(m_recordingManager.get(), &RecordingManager::recordingStopped,
             this, &DetectionCoordinator::recordingStopped);
+    connect(m_recordingManager.get(), &RecordingManager::recordingStopped,
+            this, &DetectionCoordinator::onRecordingStopped);
     connect(m_recordingManager.get(), &RecordingManager::recordingError,
             this, &DetectionCoordinator::systemError);
 }
@@ -188,18 +212,17 @@ void DetectionCoordinator::initializeStorage() {
 }
 
 void DetectionCoordinator::onFrameReady(const cv::Mat& frame) {
-    // 转发帧到录制管理器
-    m_recordingManager->submitOriginalFrame(frame);
-
-    // 转发帧到AI推理管理器
-    m_inferenceManager->submitFrame(frame);
-
-    // 发送信号给UI
     emit frameReady(frame);
+    if (m_recordingActive.load()) {
+        m_recordingManager->submitOriginalFrame(frame);
+    }
+    if (m_inferenceManager->isRunning()) {
+        m_inferenceManager->submitFrame(frame);
+    }
 }
 
 void DetectionCoordinator::onInferenceFrameReady(const cv::Mat& frame) {
-    // 转发帧到录制管理器
+    // 录制推理帧
     m_recordingManager->submitInferenceFrame(frame);
 
     // 发送信号给UI

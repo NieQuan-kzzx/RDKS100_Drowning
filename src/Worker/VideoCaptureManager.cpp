@@ -59,13 +59,21 @@ void VideoCaptureManager::stopCapture() {
 }
 
 void VideoCaptureManager::setPaused(bool paused) {
+    bool currentState = m_isPaused.load();
+    if (currentState == paused) {
+        return; // 状态未改变，无需操作
+    }
     m_isPaused.store(paused);
     if (m_camera) {
         if (paused) {
             m_camera->pause();
+            PLOGI << "VideoCaptureManager: Paused (camera paused)";
         } else {
             m_camera->resume();
+            PLOGI << "VideoCaptureManager: Resumed (camera resumed)";
         }
+    } else {
+        PLOGI << "VideoCaptureManager: " << (paused ? "Paused" : "Resumed");
     }
 }
 
@@ -82,25 +90,39 @@ void VideoCaptureManager::captureLoop() {
     m_camera->start();
 
     while (m_running.load()) {
+        if (m_needSnapshot.load()) {
+            bool wasPaused = m_isPaused.load();
+            if (wasPaused && m_camera) {
+                m_camera->resume();
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+
+            cv::Mat frame = m_camera->getData();
+            if (!frame.empty()) {
+                m_snapshotQueue.enqueue(frame.clone());
+                m_needSnapshot.store(false);
+                PLOGI << "VideoCaptureManager: Snapshot captured ("
+                    << (wasPaused ? "from paused state" : "normal operation") << ").";
+            }
+            if (wasPaused && m_camera) {
+                m_camera->pause();
+            }
+        }
+
         if (m_isPaused.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
             continue;
         }
 
         cv::Mat frame = m_camera->getData();
+        
         if (frame.empty()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
-
         // 发送原始帧信号
         emit frameReady(frame.clone());
-
-        // 处理截图请求
-        if (m_needSnapshot.load()) {
-            m_snapshotQueue.enqueue(frame.clone());
-            m_needSnapshot.store(false);
-        }
+        PLOGI << "VideoCaptureManager: Frame sent.";
     }
 
     m_camera->stop();
@@ -113,7 +135,6 @@ void VideoCaptureManager::snapshotLoop() {
         if (snapshotFrame.empty()) {
             continue; // 停止信号
         }
-
         // 发送截图信号
         emit snapshotReady(snapshotFrame);
     }

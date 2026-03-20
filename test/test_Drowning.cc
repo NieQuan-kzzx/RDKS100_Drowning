@@ -72,8 +72,8 @@ private:
 };
 
 // 参数定义
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm", "Model file");
-DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/swim_test.mp4", "Input video");
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/yolo11n_detect_nashe_640x640_nv12.hbm", "Model file");
+DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/1.mp4", "Input video");
 DEFINE_string(output_video, "drowning_result_2.mp4", "Output saved path");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_swim.names", "Labels");
 DEFINE_double(score_thres, 0.25, "Score thres");

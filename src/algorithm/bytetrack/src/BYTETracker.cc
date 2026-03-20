@@ -3,9 +3,9 @@
 
 BYTETracker::BYTETracker(int frame_rate, int track_buffer)
 {
-	track_thresh = 0.5;
-	high_thresh = 0.6;
-	match_thresh = 0.8;
+	track_thresh = 0.25;
+	high_thresh = 0.4;
+	match_thresh = 0.7;
 
 	frame_id = 0;
 	max_time_lost = int(frame_rate / 30.0 * track_buffer);

@@ -126,17 +126,28 @@ void RecordingManager::stopAllRecording() {
 void RecordingManager::submitOriginalFrame(const cv::Mat& frame) {
     if (!m_isOriginalRecording.load()) return;
 
-    if (m_originalQueue.size() < 30) {  // 限制队列长度
+    if (m_originalQueue.size() < 15) {  // 限制队列长度
         m_originalQueue.enqueue(frame.clone());
+    } else {
+        // 如果队列已满，丢弃当前帧
+        m_originalQueue.clear();
     }
 }
 
 void RecordingManager::submitInferenceFrame(const cv::Mat& frame) {
     if (!m_isInferenceRecording.load()) return;
 
-    if (m_inferenceQueue.size() < 30) {  // 限制队列长度
+    if (m_inferenceQueue.size() < 15) {  // 限制队列长度
         m_inferenceQueue.enqueue(frame.clone());
+    } else {
+        // 如果队列已满，丢弃当前帧
+        m_inferenceQueue.clear();
     }
+}
+
+void RecordingManager::setRecordingPerformanceMode(bool highPerformance) {
+    m_highPerformanceMode.store(highPerformance);
+    PLOGI << "RecordingManager: Performance mode set to " << (highPerformance ? "High Performance" : "+High Quality");
 }
 
 RecordingManager::RecordingInfo RecordingManager::getRecordingInfo() const {
@@ -150,16 +161,18 @@ void RecordingManager::originalRecordLoop() {
     while (m_isOriginalRecording.load() || !m_originalQueue.empty()) {
         cv::Mat frame = m_originalQueue.dequeue();
         if (frame.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            int sleepTime = m_highPerformanceMode.load() ? 30 : 20;
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
             continue;
         }
 
         // 初始化VideoWriter
         if (!m_originalVideoWriter.isOpened()) {
             std::lock_guard<std::mutex> lock(m_originalWriterMutex);
+            double fps = m_highPerformanceMode.load() ? 15 : 20;
             m_originalVideoWriter.open(m_originalRecordPath,
                                      cv::VideoWriter::fourcc('M','J','P','G'),
-                                     20, frame.size());
+                                     fps, frame.size());
 
             if (!m_originalVideoWriter.isOpened()) {
                 PLOGE << "RecordingManager: Failed to open original video writer";
@@ -199,16 +212,18 @@ void RecordingManager::inferenceRecordLoop() {
     while (m_isInferenceRecording.load() || !m_inferenceQueue.empty()) {
         cv::Mat frame = m_inferenceQueue.dequeue();
         if (frame.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            int sleepTime = m_highPerformanceMode.load() ? 50 : 30;
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
             continue;
         }
 
         // 初始化VideoWriter
         if (!m_inferenceVideoWriter.isOpened()) {
             std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
+            double fps = m_highPerformanceMode.load() ? 15 : 20;
             m_inferenceVideoWriter.open(m_inferenceRecordPath,
                                       cv::VideoWriter::fourcc('M','J','P','G'),
-                                      20, frame.size());
+                                      fps, frame.size());
 
             if (!m_inferenceVideoWriter.isOpened()) {
                 PLOGE << "RecordingManager: Failed to open inference video writer";

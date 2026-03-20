@@ -35,6 +35,9 @@ public:
     void submitOriginalFrame(const cv::Mat& frame);
     void submitInferenceFrame(const cv::Mat& frame);
 
+    // 性能控制
+    void setRecordingPerformanceMode(bool highPerformance); // true: 高性能模式，false: 高质量模式
+
     // 录制信息
     struct RecordingInfo {
         std::string originalPath;
@@ -56,6 +59,9 @@ private:
     void originalRecordLoop();
     void inferenceRecordLoop();
     std::string generateRecordingPath(const std::string& basePath, const std::string& suffix);
+
+    // 性能控制
+    std::atomic<bool> m_highPerformanceMode{false}; 
 
 private:
     // 原始流录制

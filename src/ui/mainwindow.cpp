@@ -29,10 +29,27 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (m_coordinator_1) m_coordinator_1->stop();
-    if (m_coordinator_2) m_coordinator_2->stop();
+    // 安全的析构顺序
+    // 步骤一：断开信号连接
+    if (m_coordinator_1) m_coordinator_1->disconnect(this);
+    if (m_coordinator_2) m_coordinator_2->disconnect(this);
+
+     // 确保录制停止，防止后台线程访问已销毁的对象
+    // 步骤二：停止协调器
+    if (m_coordinator_1) {
+        m_coordinator_1->setPaused(false);
+        m_coordinator_1->stop();
+    }
+    if (m_coordinator_2) {
+        m_coordinator_2->setPaused(false);
+        m_coordinator_2->stop();
+    }
+
+    // 步骤三：停止摄像头
     if (m_cam_1) m_cam_1->stop();
     if (m_cam_2) m_cam_2->stop();
+
+    // 步骤四：清理UI
     delete ui;
 }
 
@@ -95,8 +112,8 @@ void MainWindow::on_btnConfirm_clicked()
     QString selectedMode_2 = ui->comboBoxModels_2->currentText();
     
     // 默认模型路径
-    std::string modelType_1 = "YOLO", modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm";
-    std::string modelType_2 = "YOLO", modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Under_Surface_v1.hbm";
+    std::string modelType_1 = "YOLO", modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/s_PC-YOLO_UnderSurface.hbm";
+    std::string modelType_2 = "YOLO", modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/s_PC-YOLO_UnderSurface.hbm";
 
     // 模型选择逻辑 (Cam 1)
     if (selectedMode_1.contains("游泳检测")) {
@@ -105,6 +122,9 @@ void MainWindow::on_btnConfirm_clicked()
     } else if (selectedMode_1.contains("进水检测")) {
         modelType_1 = "Patchcore";
         modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
+    } else if (selectedMode_1.contains("溺水检测")) {
+        modelType_1 = "YOLO";
+        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/s_PC-YOLO_UnderSurface.hbm";
     }
 
     // 模型选择逻辑 (Cam 2)
@@ -114,6 +134,9 @@ void MainWindow::on_btnConfirm_clicked()
     } else if (selectedMode_2.contains("进水检测")) {
         modelType_2 = "Patchcore";
         modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
+    } else if (selectedMode_2.contains("溺水检测")) {
+        modelType_2 = "YOLO";
+        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/s_PC-YOLO_UnderSurface.hbm";
     }
 
     // 修正：改用 m_coordinator 切换模型
@@ -128,6 +151,12 @@ void MainWindow::on_btnConfirm_clicked()
         // 假设 Coordinator 提供了对应接口，或直接通过 Coordinator 传达
         m_coordinator_1->startRecording("Cam1_Infer_" + timeStr.toStdString());
         m_coordinator_2->startRecording("Cam2_Infer_" + timeStr.toStdString());
+
+        auto recordingManager1 = m_coordinator_1->getRecordingManager();
+        auto recordingManager2 = m_coordinator_2->getRecordingManager();
+        if (recordingManager1) recordingManager1->setRecordingPerformanceMode(true); // 开启高性能模式
+        if (recordingManager2) recordingManager2->setRecordingPerformanceMode(true); // 开启高性能模式
+        ui->statusbar->showMessage("录制已开始(高性能模式)", 3000);
     }
 }
 
@@ -224,18 +253,26 @@ void MainWindow::on_btnOpen_clicked() {
 }
 
 void MainWindow::on_btnClose_clicked() {
-    // 停止顺序：Coordinator -> Camera
-    if (m_coordinator_1) m_coordinator_1->stop();
-    if (m_coordinator_2) m_coordinator_2->stop();
+    if (m_coordinator_1) m_coordinator_1->disconnect(this);
+    if (m_coordinator_2) m_coordinator_2->disconnect(this);
+
+    handleRecording(false);
+
+    // Coordinator -> Camera
+    if (m_coordinator_1) {
+        m_coordinator_1->setPaused(false);
+        m_coordinator_1->stop();
+    }
+    if (m_coordinator_2) {
+        m_coordinator_2->setPaused(false);
+        m_coordinator_2->stop();
+    }
     if (m_cam_1) m_cam_1->stop();
     if (m_cam_2) m_cam_2->stop();
 
-    handleRecording(false);
     ui->btnPause->setText("暂停拍摄"); 
 
     // 断开所有连接防止内存池在关闭后仍被异步调用
-    if (m_coordinator_1) m_coordinator_1->disconnect(this);
-    if (m_coordinator_2) m_coordinator_2->disconnect(this);
 
     ui->labelOriginal_1->clear();
     ui->labelProcessed_1->clear();

@@ -94,8 +94,38 @@ test-clean:
 	@find . -name "*.log" -o -name "*.out" -o -name "test_*" | grep -v ".cc" | xargs rm -f 2>/dev/null || true
 	@echo "✅ 测试输出清理完成！"
 
+# 清理运行时数据（截图、录像等）
+data-clean:
+	@echo "🧹 正在清理运行时数据..."
+	@if [ -d "snapshots" ]; then \
+		echo "  清理截图目录..."; \
+		rm -rf snapshots/* 2>/dev/null || echo "  ⚠️  部分文件可能需要管理员权限"; \
+		rmdir snapshots 2>/dev/null || true; \
+	fi
+	@if [ -d "records" ]; then \
+		echo "  清理录像目录..."; \
+		rm -rf records/* 2>/dev/null || echo "  ⚠️  部分文件可能需要管理员权限"; \
+		rmdir records 2>/dev/null || true; \
+	fi
+	@if [ -d "logs" ]; then \
+		echo "  清理日志目录..."; \
+		rm -rf logs/* 2>/dev/null || echo "  ⚠️  部分文件可能需要管理员权限"; \
+		rmdir logs 2>/dev/null || true; \
+	fi
+	@echo "✅ 运行时数据清理完成！"
+
+# 强制清理（使用sudo处理权限问题）
+force-clean: data-clean
+	@echo "🧹 正在强制清理所有数据..."
+	-@sudo rm -rf snapshots records logs 2>/dev/null || true
+	@echo "✅ 强制清理完成！"
+
+# 完全清理（构建+数据+测试）
+clean-all: clean test-clean data-clean
+	@echo "🧹 完全清理完成！所有构建文件、测试输出和运行时数据已清除。"
+      
 # 特定功能测试目标
-.PHONY: test-bytetrack test-detection test-imagesaver test-rtsp test-h264
+.PHONY: test-bytetrack test-detection test-detection-video test-rtsp test-h264
 .PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab
 .PHONY: test-drowning test-swimmer test-under-surface
 
@@ -108,6 +138,11 @@ test-bytetrack: build
 test-detection: build
 	@echo "🔍 正在测试目标检测..."
 	@cd $(TEST_DIR) && ./test_Detection
+
+# 目标检测视频测试
+test-detection-video: build
+	@echo "🎥 正在进行视频目标检测测试..."
+	@cd $(TEST_DIR) && ./test_DetectionVideo
 
 # 图像保存测试
 test-imagesaver: build
@@ -249,9 +284,16 @@ help:
 	@echo "  make test-basic     - 运行基础测试"
 	@echo "  make test-advanced  - 运行高级测试"
 	@echo ""
+	@echo "🧹 清理目标:"
+	@echo "  make data-clean     - 清理运行时数据（截图、录像等）"
+	@echo "  make force-clean    - 强制清理（处理权限问题）"
+	@echo "  make clean-all      - 完全清理（构建+数据+测试）"
+	@echo "  make test-clean     - 清理测试输出文件"
+	@echo ""
 	@echo "🔧 特定功能测试:"
 	@echo "  make test-bytetrack     - ByteTrack跟踪测试"
 	@echo "  make test-detection     - 目标检测测试"
+	@echo "  make test-detection-video - 目标检测视频测试"
 	@echo "  make test-rtsp         - RTSP摄像头测试"
 	@echo "  make test-pose         - 姿态估计测试"
 	@echo "  make test-drowning     - 溺水检测测试"

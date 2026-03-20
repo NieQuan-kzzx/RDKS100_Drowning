@@ -30,6 +30,10 @@ public:
     bool startRecording(const std::string& basePath = "");
     void stopRecording();
 
+public slots:
+    void onRecordingStarted();
+    void onRecordingStopped();
+
     // 快照控制
     void triggerSnapshot();
 
@@ -64,6 +68,8 @@ private slots:
 private:
     void setupConnections();
     void initializeStorage();
+
+    std::atomic<bool> m_recordingActive{false};
 
 private:
     int m_workerId;
