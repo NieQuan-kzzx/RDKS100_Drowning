@@ -1,17 +1,20 @@
 #include "MatPool.h"
 #include <plog/Log.h>
 #include <algorithm>
+#include <chrono>
 
-MatPool::MatPool(size_t initial_size, cv::Size default_size, int default_type)
+MatPool::MatPool(size_t initial_size, cv::Size default_size, int default_type, size_t max_pool_size)
     : default_size_(default_size)
     , default_type_(default_type)
+    , max_pool_size_(max_pool_size)
     , in_use_count_(0)
     , total_requests_(0)
     , cache_hits_(0)
     , cache_misses_(0) {
 
     PLOGI << "Initializing MatPool with " << initial_size << " matrices ("
-          << default_size.width << "x" << default_size.height << ", type: " << default_type << ")";
+          << default_size.width << "x" << default_size.height << ", type: " << default_type
+          << "), max pool size: " << max_pool_size << "";
 
     preallocate(initial_size);
 }
@@ -39,6 +42,7 @@ cv::Mat MatPool::getMat(cv::Size size, int type) {
 
     if (available_mat != nullptr) {
         available_mat->in_use = true;
+        available_mat->last_used = std::chrono::steady_clock::now();
         in_use_count_++;
         cache_hits_++;
         PLOGV << "Reused matrix from pool. In-use count: " << in_use_count_.load();
@@ -46,6 +50,11 @@ cv::Mat MatPool::getMat(cv::Size size, int type) {
     }
 
     // 如果没有找到可用的矩阵，创建新的
+    // 检查是否需要清理空间
+    if (pool_.size() >= max_pool_size_) {
+        cleanupUnused(max_pool_size_ / 2); // 清理到一半大小
+    }
+
     auto new_mat_info = createMat(size, type);
     cv::Mat new_mat = new_mat_info->mat;
     new_mat_info->in_use = true;
@@ -76,8 +85,10 @@ void MatPool::returnMat(cv::Mat mat) {
                 mat_info->in_use = false;
                 if (in_use_count_ > 0) in_use_count_--;
                 
+                mat_info->last_used = std::chrono::steady_clock::now();
+
                 // 注意：地平线 RDK 上如果涉及硬件加速，通常不建议频繁 setTo(0)，会消耗 CPU
-                // mat.setTo(cv::Scalar::all(0)); 
+                // mat.setTo(cv::Scalar::all(0));
 
                 PLOGV << "Returned matrix to pool. In-use count: " << in_use_count_.load();
             }
@@ -110,6 +121,58 @@ void MatPool::clear() {
     in_use_count_ = 0;
 
     PLOGI << "MatPool cleared.";
+}
+
+void MatPool::cleanupUnused(size_t target_free_count) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // 计算可用的（未使用）矩阵数量
+    size_t available_count = 0;
+    for (const auto& mat_info : pool_) {
+        if (!mat_info->in_use) {
+            available_count++;
+        }
+    }
+
+    if (available_count <= target_free_count) {
+        PLOGV << "No cleanup needed. Available count: " << available_count
+              << ", target: " << target_free_count;
+        return;
+    }
+
+    // 按最后使用时间排序未使用的矩阵（LRU策略）
+    std::vector<std::pair<std::chrono::steady_clock::time_point, size_t>> unused_indices;
+    for (size_t i = 0; i < pool_.size(); ++i) {
+        if (!pool_[i]->in_use) {
+            unused_indices.emplace_back(pool_[i]->last_used, i);
+        }
+    }
+
+    // 按时间排序（最久未使用的在前）
+    std::sort(unused_indices.begin(), unused_indices.end());
+
+    // 计算要删除的数量
+    size_t to_remove = available_count - target_free_count;
+    PLOGD << "Cleaning up " << to_remove << " unused matrices from pool. Pool size: " << pool_.size();
+
+    // 标记要删除的矩阵（从后往前删除以避免索引问题）
+    for (size_t i = 0; i < to_remove && i < unused_indices.size(); ++i) {
+        size_t index = unused_indices[i].second;
+
+        // 计算内存节省
+        cv::Mat mat = pool_[index]->mat;
+        size_t memory_freed = mat.total() * mat.elemSize();
+
+        PLOGD << "Removing unused matrix (size: " << mat.size() << ", type: " << mat.type()
+              << ", memory freed: " << memory_freed / 1024 << " KB)";
+
+        // 使用swap-and-pop技术删除元素
+        pool_[index] = std::move(pool_.back());
+        pool_.pop_back();
+    }
+
+    PLOGI << "Cleanup completed. New pool size: " << pool_.size()
+          << ", target free count: " << target_free_count;
 }
 
 size_t MatPool::availableCount() const {

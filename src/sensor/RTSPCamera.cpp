@@ -13,6 +13,9 @@ RTSPCamera::RTSPCamera(const std::string& url, int width, int height,
     // 预分配帧缓冲区 - 不使用内存池避免生命周期管理问题
     yuv_frame_ = cv::Mat(cv::Size(width, height * 3 / 2), CV_8UC1);
     bgr_frame_ = cv::Mat(cv::Size(width, height), CV_8UC3);
+
+    // Set the MatPool reference in the base class
+    setMatPool(&m_matPool);
 }
 
 RTSPCamera::~RTSPCamera() {
@@ -99,12 +102,11 @@ void RTSPCamera::dataCollectionLoop() {
             // 使用预分配的缓冲区进行颜色转换
             cv::cvtColor(yuv_frame_, bgr_frame_, cv::COLOR_YUV2BGR_NV12);
 
-            // 存入队列，使用 clone() 确保内存独立
-            // this->enqueueData(bgr_frame_.clone());
-            cv::Mat poolMat = m_matPool.getMat(); 
+            // 使用内存池获取矩阵，避免频繁内存分配
+            cv::Mat poolMat = m_matPool.getMat();
             if(!poolMat.empty()){
                 cv::cvtColor(yuv_frame_, poolMat, cv::COLOR_YUV2BGR_NV12);
-                this->enqueueData(poolMat); // ImageSensor 内部应负责处理 poolMat 的生命周期
+                this->enqueueData(poolMat); // ImageSensor 将负责返回poolMat到内存池
             }
 
             // 采集频率控制

@@ -14,6 +14,14 @@ ImageSensor::ImageSensor(int _queue_max_length, int _capture_interval_ms, bool _
 ImageSensor::~ImageSensor()
 {
     this->stop();
+    // Return any remaining pool matrices
+    if (mat_pool != nullptr) {
+        std::unique_lock<std::mutex> lock(mutex);
+        while (!pool_matrices.empty()) {
+            mat_pool->returnMat(pool_matrices.front());
+            pool_matrices.pop_front();
+        }
+    }
 }
 
 void ImageSensor::start()
@@ -47,6 +55,11 @@ void ImageSensor::clear()
     while (!images.empty())
     {
         images.pop_front();
+        // Return pool matrices when clearing
+        if (!pool_matrices.empty() && mat_pool != nullptr) {
+            mat_pool->returnMat(pool_matrices.front());
+            pool_matrices.pop_front();
+        }
     }
 }
 
@@ -63,11 +76,32 @@ void ImageSensor::enqueueData(const cv::Mat &img)
         else
         {
             PLOGV << "Drop oldest image because queue is full!";
+            // Return pool matrix if it came from pool before removing
+            if (!pool_matrices.empty() && mat_pool != nullptr) {
+                mat_pool->returnMat(pool_matrices.front());
+                pool_matrices.pop_front();
+            }
             images.pop_front();
         }
     }
-    images.push_back(img.clone());
+
+    // Store both the clone and track if original was from pool
+    cv::Mat cloned_img = img.clone();
+    images.push_back(cloned_img);
+
+    // Check if the original matrix came from pool by comparing data pointers
+    // We need to track the original pool matrix to return it later
+    if (mat_pool != nullptr && !img.empty()) {
+        // Store the original matrix to return to pool
+        pool_matrices.push_back(const_cast<cv::Mat&>(img));
+    }
+
+    // Update latest frame and track its pool matrix
     latest_frame = img.clone();
+    if (mat_pool != nullptr && !img.empty()) {
+        latest_pool_matrix = const_cast<cv::Mat&>(img);
+    }
+
     cv.notify_one();
     // PLOGV << "enqueueData! queue size: " << this->images.size();
 }
@@ -82,6 +116,13 @@ cv::Mat ImageSensor::getDataNoBlock()
     }
     cv::Mat img = this->images.front();
     this->images.pop_front();
+
+    // Return the corresponding pool matrix if it exists
+    if (!pool_matrices.empty() && mat_pool != nullptr) {
+        mat_pool->returnMat(pool_matrices.front());
+        pool_matrices.pop_front();
+    }
+
     return img;
 }
 
@@ -95,7 +136,13 @@ cv::Mat ImageSensor::getData()
     }
     cv::Mat frame = this->images.front();
     this->images.pop_front();
-    
+
+    // Return the corresponding pool matrix if it exists
+    if (!pool_matrices.empty() && mat_pool != nullptr) {
+        mat_pool->returnMat(pool_matrices.front());
+        pool_matrices.pop_front();
+    }
+
     PLOGV << "getData! queue size: " << this->images.size();
     return frame;
 }
@@ -105,4 +152,7 @@ cv::Mat ImageSensor::getLastestFrame()
 {
     std::unique_lock<std::mutex> lock(mutex);
     return this->latest_frame.clone();
+    // Note: We don't return the latest_pool_matrix here because
+    // getLastestFrame() is typically used for display/snapshot purposes
+    // and the caller doesn't consume the frame from the queue
 }

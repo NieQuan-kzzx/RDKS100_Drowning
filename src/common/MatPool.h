@@ -7,6 +7,8 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <chrono>
+#include <algorithm>
 
 /**
  * @brief 自定义比较器，解决 cv::Size 无法直接作为 std::map 的 Key 的问题
@@ -31,13 +33,15 @@ class MatPool {
 public:
     MatPool(size_t initial_size = 10,
             cv::Size default_size = cv::Size(1920, 1080),
-            int default_type = CV_8UC3);
+            int default_type = CV_8UC3,
+            size_t max_pool_size = 50);
     ~MatPool();
 
     cv::Mat getMat(cv::Size size = cv::Size(), int type = -1);
     void returnMat(cv::Mat mat);
     void preallocate(size_t count);
     void clear();
+    void cleanupUnused(size_t target_free_count = 10);
     size_t availableCount() const;
     size_t inUseCount() const;
 
@@ -61,7 +65,11 @@ private:
     struct MatInfo {
         cv::Mat mat;
         bool in_use;
-        MatInfo(cv::Size size, int type) : mat(cv::Mat::zeros(size, type)), in_use(false) {}
+        std::chrono::steady_clock::time_point last_used;
+
+        MatInfo(cv::Size size, int type)
+            : mat(cv::Mat::zeros(size, type)), in_use(false),
+              last_used(std::chrono::steady_clock::now()) {}
     };
 
     std::vector<std::unique_ptr<MatInfo>> pool_;
@@ -70,6 +78,7 @@ private:
 
     cv::Size default_size_;
     int default_type_;
+    size_t max_pool_size_;
     std::atomic<size_t> in_use_count_;
 
     // Performance statistics
@@ -100,7 +109,7 @@ public:
         auto key = std::make_pair(size, type);
 
         if (pools.find(key) == pools.end()) {
-            pools[key] = std::make_unique<MatPool>(10, size, type);
+            pools[key] = std::make_unique<MatPool>(10, size, type, 50); // 默认最大池大小为50
         }
 
         return *pools[key];

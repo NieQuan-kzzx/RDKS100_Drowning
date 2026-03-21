@@ -43,7 +43,7 @@ private:
     int m_width;
     int m_height;
 
-    // 内存池引用 - 仅用于性能统计
+    // 内存池引用 - 用于内存管理
     MatPool& m_matPool;
 
     // 帧缓冲区 - 不使用内存池避免生命周期管理复杂性
