@@ -10,9 +10,9 @@
 #include "common_utils.hpp"
 
 // 参数定义
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/s_PC-YOLO_UnderSurface.hbm", "Model file");
-DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/swim3.mp4", "Input video");
-DEFINE_string(output_video, "detection_result.mp4", "Output saved path");
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/new_UnderSurface_1920x1080.hbm", "Model file");
+DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/swim5.mp4", "Input video");
+DEFINE_string(output_video, "swim5_result.mp4", "Output saved path");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_swim.names", "Labels");
 DEFINE_double(score_thres, 0.25, "Score thres");
 DEFINE_double(nms_thres, 0.7, "NMS thres");

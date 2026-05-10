@@ -153,7 +153,7 @@ EXIT:
 
 void signal_handler_func(int signum) { is_stop = true; }
 
-DEFINE_string(rtsp_url, "rtsp://admin:waterline123456@192.168.127.15", "RTSP URL");
+DEFINE_string(rtsp_url, "rtsp://127.0.0.1/assets/4k.h264", "RTSP URL");
 DEFINE_string(transfer_type, "tcp", "tcp or udp");
 DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm", "YOLO11 model path");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_coco.names", "Label file path");

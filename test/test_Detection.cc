@@ -1,10 +1,10 @@
 // Attention: This program runs on RDK S100 board.
 // D-Robotics S100 *.hbm 模型路径
 // Path of D-Robotics S100 *.hbm model.
-#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm"
+#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/models/LSOD-YOLO_11s_visdrone.hbm"
 // 推理使用的测试图片路径
 // Path of the test image used for inference.
-#define TEST_IMG_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/bus.jpg"
+#define TEST_IMG_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/smaiiDetection.jpg"
 // 前处理方式选择, 0:Resize, 1:LetterBox
 // Preprocessing method selection, 0: Resize, 1: LetterBox
 #define RESIZE_TYPE 0 
@@ -12,13 +12,13 @@
 #define PREPROCESS_TYPE LETTERBOX_TYPE
 // 推理结果保存路径
 // Path where the inference result will be saved
-#define IMG_SAVE_PATH "result.jpg"
+#define IMG_SAVE_PATH "visdrone_result.jpg"
 // 模型的类别数量, 默认80
 // Number of classes in the model, default is 80
-#define CLASSES_NUM 80
+#define CLASSES_NUM 10
 // NMS的阈值, 默认0.7
 // Non-Maximum Suppression (NMS) threshold, default is 0.7
-#define NMS_THRESHOLD 0.7
+#define NMS_THRESHOLD 0.5
 // 分数阈值, 默认0.25
 // Score threshold, default is 0.25
 #define SCORE_THRESHOLD 0.25
@@ -61,15 +61,17 @@
     } while (0);
 // COCO Names
 std::vector<std::string> object_names = {
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
-    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
-    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
-    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
-    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
-    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
-    "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
-    "scissors", "teddy bear", "hair drier", "toothbrush"
+    "pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor",
+    // "person at surface", "person underwater"
+    // "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
+    // "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
+    // "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
+    // "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
+    // "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
+    // "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
+    // "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
+    // "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
+    // "scissors", "teddy bear", "hair drier", "toothbrush"
 };
 // S100定制颜色
 std::vector<cv::Scalar> rdk_colors = {
@@ -367,128 +369,94 @@ int main()
     std::cout << "\033[31m forward time = " << std::fixed << std::setprecision(2) 
               << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - begin_time).count() / 1000.0 
               << " ms\033[0m" << std::endl;
-    // Step 8: 后处理
-    // Step 8: Post-processing
+    // Step 8: 后处理 - 适配动态分辨率 (2560x1440 等)
+    // Step 8: Post-processing - Adapting to dynamic resolution
     std::cout << "\033[32m-> Starting post-processing\033[0m" << std::endl;
     begin_time = std::chrono::system_clock::now();
-    // 计算置信度阈值的原始值（利用Sigmoid函数的单调性）
+
+    // 计算置信度阈值的原始值 (Sigmoid 逆运算)
     float CONF_THRES_RAW = -std::log(1.0f / SCORE_THRESHOLD - 1.0f);
-    // 预计算锚点
-    // s_anchor: 80x80 (stride=8)
-    std::vector<std::pair<float, float>> s_anchor(80 * 80);
-    for (int h = 0; h < 80; h++) {
-        for (int w = 0; w < 80; w++) {
-            s_anchor[h * 80 + w] = {w + 0.5f, h + 0.5f};
-        }
-    }
-    // m_anchor: 40x40 (stride=16) 
-    std::vector<std::pair<float, float>> m_anchor(40 * 40);
-    for (int h = 0; h < 40; h++) {
-        for (int w = 0; w < 40; w++) {
-            m_anchor[h * 40 + w] = {w + 0.5f, h + 0.5f};
-        }
-    }   
-    // l_anchor: 20x20 (stride=32)
-    std::vector<std::pair<float, float>> l_anchor(20 * 20);
-    for (int h = 0; h < 20; h++) {
-        for (int w = 0; w < 20; w++) {
-            l_anchor[h * 20 + w] = {w + 0.5f, h + 0.5f};
-        }
-    }
-    // 处理3个特征层的输出
+
     std::vector<cv::Rect2d> all_bboxes;
     std::vector<float> all_scores;
     std::vector<int> all_ids;
-    // 处理每个尺度
-    for (int scale = 0; scale < 3; scale++) {
-        int cls_idx = scale * 2;     // 0, 2, 4
-        int bbox_idx = scale * 2 + 1; // 1, 3, 5
-        int stride = (scale == 0) ? 8 : (scale == 1) ? 16 : 32;
-        int grid_size = (scale == 0) ? 80 : (scale == 1) ? 40 : 20;
-        // 刷新BPU内存
+
+    // 遍历 YOLO 的 3 个特征层 (Stride 8, 16, 32)
+    // Iterate through 3 YOLO feature layers
+    for (int i = 0; i < 3; i++) {
+        int cls_idx = i * 2;     // 类别输出索引: 0, 2, 4
+        int bbox_idx = i * 2 + 1; // 框回归输出索引: 1, 3, 5
+        int stride = (i == 0) ? 8 : (i == 1) ? 16 : 32;
+
+        // 获取当前层的属性以确定特征图尺寸 (grid_h, grid_w)
+        // Get layer properties to determine feature map size
+        hbDNNTensorProperties cls_prop, bbox_prop;
+        hbDNNGetOutputTensorProperties(&cls_prop, dnn_handle, cls_idx);
+        hbDNNGetOutputTensorProperties(&bbox_prop, dnn_handle, bbox_idx);
+
+        int grid_h = cls_prop.validShape.dimensionSize[1];
+        int grid_w = cls_prop.validShape.dimensionSize[2];
+        
+        // 刷新缓存确保数据同步
         hbUCPMemFlush(&(output_tensors[cls_idx].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
         hbUCPMemFlush(&(output_tensors[bbox_idx].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
-        // 获取输出数据指针
+
         auto *cls_data = reinterpret_cast<float *>(output_tensors[cls_idx].sysMem.virAddr);
         auto *bbox_data = reinterpret_cast<int32_t *>(output_tensors[bbox_idx].sysMem.virAddr);
-        auto *bbox_scale = reinterpret_cast<float *>(output_tensors[bbox_idx].properties.scale.scaleData);
-        int total_anchors = grid_size * grid_size; 
-        // 第一步：找到所有超过阈值的位置
-        std::vector<int> valid_indices;
-        std::vector<int> valid_class_ids;
-        std::vector<float> valid_scores; 
-        for (int i = 0; i < total_anchors; i++) {
-            float *cur_cls = cls_data + i * CLASSES_NUM;
-            // 找到最大分数和对应类别
-            int max_cls_id = 0;
-            for (int c = 1; c < CLASSES_NUM; c++) {
-                if (cur_cls[c] > cur_cls[max_cls_id]) {
-                    max_cls_id = c;
+        auto *bbox_scale = reinterpret_cast<float *>(bbox_prop.scale.scaleData);
+
+        // 动态遍历当前特征层的所有网格
+        // Dynamically traverse all grids of the current feature layer
+        for (int h = 0; h < grid_h; h++) {
+            for (int w = 0; w < grid_w; w++) {
+                int anchor_idx = h * grid_w + w;
+                float *cur_cls = cls_data + anchor_idx * CLASSES_NUM;
+
+                // 1. 寻找最大得分及其类别
+                int max_cls_id = 0;
+                for (int c = 1; c < CLASSES_NUM; c++) {
+                    if (cur_cls[c] > cur_cls[max_cls_id]) max_cls_id = c;
                 }
-            }           
-            // 检查是否超过阈值（raw值比较）
-            if (cur_cls[max_cls_id] >= CONF_THRES_RAW) {
-                valid_indices.push_back(i);
-                valid_class_ids.push_back(max_cls_id);
-                // 计算Sigmoid分数
-                float score = 1.0f / (1.0f + std::exp(-cur_cls[max_cls_id]));
-                valid_scores.push_back(score);
-            }
-        }       
-        // 第二步：处理有效检测的边界框
-        for (size_t idx = 0; idx < valid_indices.size(); idx++) {
-            int anchor_idx = valid_indices[idx];
-            int32_t *cur_bbox = bbox_data + anchor_idx * (REG * 4);            
-            // DFL计算 - 对每条边进行处理
-            float ltrb[4];
-            for (int i = 0; i < 4; i++) {
-                float dfl_values[REG];
-                float softmax_values[REG];                
-                // 反量化DFL值
-                for (int j = 0; j < REG; j++) {
-                    int scale_idx = i * REG + j;
-                    dfl_values[j] = float(cur_bbox[scale_idx]) * bbox_scale[scale_idx];
-                }                
-                // Softmax
-                softmax(dfl_values, softmax_values, REG);                
-                // 计算期望值（DFL到距离的转换）
-                ltrb[i] = 0.0f;
-                for (int j = 0; j < REG; j++) {
-                    ltrb[i] += softmax_values[j] * j;
+
+                // 2. 原始分数阈值过滤
+                if (cur_cls[max_cls_id] < CONF_THRES_RAW) continue;
+
+                // 3. DFL 解析边界框距离 (ltrb)
+                int32_t *cur_bbox = bbox_data + anchor_idx * (REG * 4);
+                float ltrb[4];
+                for (int k = 0; k < 4; k++) {
+                    float dfl_values[REG], softmax_values[REG];
+                    for (int j = 0; j < REG; j++) {
+                        // 反量化 BPU 输出的 int32 数据
+                        dfl_values[j] = float(cur_bbox[k * REG + j]) * bbox_scale[k * REG + j];
+                    }
+                    softmax(dfl_values, softmax_values, REG);
+                    ltrb[k] = 0.0f;
+                    for (int j = 0; j < REG; j++) ltrb[k] += softmax_values[j] * j;
                 }
-            }           
-            // 获取锚点坐标
-            float anchor_x, anchor_y;
-            if (scale == 0) {
-                anchor_x = s_anchor[anchor_idx].first;
-                anchor_y = s_anchor[anchor_idx].second;
-            } else if (scale == 1) {
-                anchor_x = m_anchor[anchor_idx].first;
-                anchor_y = m_anchor[anchor_idx].second;
-            } else {
-                anchor_x = l_anchor[anchor_idx].first;
-                anchor_y = l_anchor[anchor_idx].second;
-            }            
-            // ltrb转xyxy坐标
-            double x1 = (anchor_x - ltrb[0]) * stride;
-            double y1 = (anchor_y - ltrb[1]) * stride;
-            double x2 = (anchor_x + ltrb[2]) * stride;
-            double y2 = (anchor_y + ltrb[3]) * stride;            
-            // 检查边界框合法性
-            if (x2 > x1 && y2 > y1) {
-                all_bboxes.push_back(cv::Rect2d(x1, y1, x2 - x1, y2 - y1));
-                all_scores.push_back(valid_scores[idx]);
-                all_ids.push_back(valid_class_ids[idx]);
+
+                // 4. 坐标转换: 基于网格中心点 (w+0.5, h+0.5)
+                // Coordinate transformation based on grid center
+                double x1 = (w + 0.5f - ltrb[0]) * stride;
+                double y1 = (h + 0.5f - ltrb[1]) * stride;
+                double x2 = (w + 0.5f + ltrb[2]) * stride;
+                double y2 = (h + 0.5f + ltrb[3]) * stride;
+
+                if (x2 > x1 && y2 > y1) {
+                    float score = 1.0f / (1.0f + std::exp(-cur_cls[max_cls_id]));
+                    all_bboxes.push_back(cv::Rect2d(x1, y1, x2 - x1, y2 - y1));
+                    all_scores.push_back(score);
+                    all_ids.push_back(max_cls_id);
+                }
             }
         }
     }
-    // Step 9: 分类别NMS处理
+
+    // Step 9: 分类别 NMS 处理 (保持原逻辑不变)
     // Step 9: Class-wise NMS processing
     std::vector<std::vector<int>> nms_indices(CLASSES_NUM);
-    int total_detections_before_nms = all_bboxes.size();
     int total_detections_after_nms = 0;    
     for (int cls_id = 0; cls_id < CLASSES_NUM; cls_id++) {
-        // 收集该类别的所有检测
         std::vector<cv::Rect2d> class_bboxes;
         std::vector<float> class_scores;
         std::vector<int> original_indices;        
@@ -501,56 +469,59 @@ int main()
         }        
         if (!class_bboxes.empty()) {
             std::vector<int> class_nms_indices;
-            cv::dnn::NMSBoxes(class_bboxes, class_scores, 
-                             SCORE_THRESHOLD, NMS_THRESHOLD, class_nms_indices);            
-            // 将类别内的索引转换为全局索引
+            cv::dnn::NMSBoxes(class_bboxes, class_scores, SCORE_THRESHOLD, NMS_THRESHOLD, class_nms_indices);            
             for (int idx : class_nms_indices) {
                 nms_indices[cls_id].push_back(original_indices[idx]);
             }
             total_detections_after_nms += class_nms_indices.size();
         }
     }  
-    std::cout << "✓ Detections before NMS: " << total_detections_before_nms << std::endl;
-    std::cout << "✓ Detections after NMS: " << total_detections_after_nms << std::endl;
+    std::cout << "✓ Total detections after NMS: " << total_detections_after_nms << std::endl;
     std::cout << "\033[31m Post Process time = " << std::fixed << std::setprecision(2) 
               << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - begin_time).count() / 1000.0 
               << " ms\033[0m" << std::endl;
+
     // Step 10: 绘制结果
     // Step 10: Draw results
     std::cout << "\033[32m-> Drawing results\033[0m" << std::endl;
     begin_time = std::chrono::system_clock::now(); 
     for (int cls_id = 0; cls_id < CLASSES_NUM; cls_id++) {
         for (int global_idx : nms_indices[cls_id]) {
-            // 坐标转换回原图
+            // 坐标还原到原始图像分辨率 (处理 LetterBox/Resize 偏移)
             float x1 = (all_bboxes[global_idx].x - x_shift) / x_scale;
             float y1 = (all_bboxes[global_idx].y - y_shift) / y_scale;
             float x2 = x1 + all_bboxes[global_idx].width / x_scale;
             float y2 = y1 + all_bboxes[global_idx].height / y_scale;
-            float score = all_scores[global_idx];       
-            // 边界检查
+
+            // 越界边界检查
             x1 = std::max(0.0f, std::min((float)img.cols - 1, x1));
             y1 = std::max(0.0f, std::min((float)img.rows - 1, y1));
             x2 = std::max(0.0f, std::min((float)img.cols - 1, x2));
             y2 = std::max(0.0f, std::min((float)img.rows - 1, y2)); 
+
             // 绘制边界框
-            cv::Scalar color = rdk_colors[cls_id % 20];
-            cv::rectangle(img, cv::Point(x1, y1), cv::Point(x2, y2), color, LINE_SIZE);         
-            // 绘制标签
-            std::string label = object_names[cls_id] + ": " + std::to_string(int(score * 100)) + "%";
+            cv::Scalar color = rdk_colors[cls_id % rdk_colors.size()];
+            cv::rectangle(img, cv::Point(x1, y1), cv::Point(x2, y2), color, LINE_SIZE); 
+            
+            // 绘制带有背景板的标签
+            std::string label = object_names[cls_id] + " " + std::to_string(int(all_scores[global_idx] * 100)) + "%";
             int baseline;
-            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, FONT_SIZE, FONT_THICKNESS, &baseline);   
-            cv::Point label_pos(x1, y1 - 10 > textSize.height ? y1 - 10 : y1 + textSize.height + 10);
-            cv::rectangle(img, label_pos + cv::Point(0, baseline), 
-                         label_pos + cv::Point(textSize.width, -textSize.height), color, cv::FILLED);
-            cv::putText(img, label, label_pos, cv::FONT_HERSHEY_SIMPLEX, FONT_SIZE, cv::Scalar(0, 0, 0), FONT_THICKNESS);         
-            // 打印检测结果
-            std::cout << "(" << x1 << ", " << y1 << ", " << x2 << ", " << y2 << ") -> " 
-                      << object_names[cls_id] << ": " << std::fixed << std::setprecision(2) << score << std::endl;
+            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, FONT_SIZE, FONT_THICKNESS, &baseline); 
+            
+            // 自动调整标签位置防止超出顶部
+            int label_y = (y1 - 10 > textSize.height) ? (y1 - 10) : (y1 + textSize.height + 10);
+            cv::Point label_pos(x1, label_y);
+            
+            // // 绘制标签背景
+            // cv::rectangle(img, label_pos + cv::Point(0, baseline), 
+            //              label_pos + cv::Point(textSize.width, -textSize.height), color, cv::FILLED);
+            // // 绘制黑色文字
+            // cv::putText(img, label, label_pos, cv::FONT_HERSHEY_SIMPLEX, FONT_SIZE, cv::Scalar(0, 0, 0), FONT_THICKNESS); 
         }
-    } 
+    }
     std::cout << "\033[31m Draw Result time = " << std::fixed << std::setprecision(2) 
-              << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - begin_time).count() / 1000.0 
-              << " ms\033[0m" << std::endl;
+            << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - begin_time).count() / 1000.0 
+            << " ms\033[0m" << std::endl;
     // Step 11: 保存结果
     // Step 11: Save result
     cv::imwrite(IMG_SAVE_PATH, img);
