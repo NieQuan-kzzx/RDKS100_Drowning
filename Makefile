@@ -63,7 +63,9 @@ test-basic: build
 	@echo "🧪 正在运行基础测试..."
 	@cd $(TEST_DIR) && \
 	if [ -f test_Bytetrack ]; then ./test_Bytetrack && echo "✅ Bytetrack测试通过"; fi; \
+	if [ -f test_BotSort ]; then ./test_BotSort && echo "✅ BotSort测试通过"; fi; \
 	if [ -f test_Detection ]; then ./test_Detection && echo "✅ Detection测试通过"; fi; \
+	if [ -f test_bytetrack_detection ]; then ./test_bytetrack_detection && echo "✅ bytetrack_detection测试通过"; fi; \
 	if [ -f test_ImageSaver ]; then ./test_ImageSaver && echo "✅ ImageSaver测试通过"; fi; \
 	if [ -f test_rtsp ]; then sudo ./test_rtsp && echo "✅ RTSP测试通过"; fi
 
@@ -125,8 +127,8 @@ clean-all: clean test-clean data-clean
 	@echo "🧹 完全清理完成！所有构建文件、测试输出和运行时数据已清除。"
       
 # 特定功能测试目标
-.PHONY: test-bytetrack test-detection test-detection-video test-rtsp test-h264
-.PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab
+.PHONY: test-bytetrack test-botsort test-detection test-bytetrack-detection test-detection-video test-rtsp test-h264
+.PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab test-seg-video
 .PHONY: test-drowning test-swimmer test-under-surface
 
 # ByteTrack 跟踪测试
@@ -134,10 +136,20 @@ test-bytetrack: build
 	@echo "🎯 正在测试ByteTrack..."
 	@cd $(TEST_DIR) && ./test_Bytetrack
 
+# BotSort 跟踪测试
+test-botsort: build
+	@echo "🎯 正在测试BotSort..."
+	@cd $(TEST_DIR) && ./test_BotSort
+
 # 目标检测测试
 test-detection: build
 	@echo "🔍 正在测试目标检测..."
 	@cd $(TEST_DIR) && ./test_Detection
+
+# 目标检测测试
+test-bytetrack-detection: build
+	@echo "🔍 正在测试bytetrack目标检测..."
+	@cd $(TEST_DIR) && ./test_bytetrack_detection
 
 # 目标检测视频测试
 test-detection-video: build
@@ -198,6 +210,11 @@ test-mmpose: build
 test-seg: build
 	@echo "🗺️ 正在测试语义分割..."
 	@cd $(TEST_DIR) && ./test_seg
+
+# 语义分割测试
+test-seg-video: build
+	@echo "🗺️ 正在测试语义分割..."
+	@cd $(TEST_DIR) && ./test_seg_video
 
 # SAHI小目标检测测试
 test-sahi: build
@@ -292,12 +309,15 @@ help:
 	@echo ""
 	@echo "🔧 特定功能测试:"
 	@echo "  make test-bytetrack     - ByteTrack跟踪测试"
+	@echo "  make test-botsort     - BotSort跟踪测试"
 	@echo "  make test-detection     - 目标检测测试"
+	@echo "  make test-bytetrack-detection - bytetrack目标检测测试"
 	@echo "  make test-detection-video - 目标检测视频测试"
 	@echo "  make test-rtsp         - RTSP摄像头测试"
 	@echo "  make test-pose         - 姿态估计测试"
 	@echo "  make test-drowning     - 溺水检测测试"
 	@echo "  make test-seg          - 语义分割测试"
+	@echo "  make test-seg-video    - 语义分割测试"
 	@echo "  make test-deeplab      - DeepLabV3+测试"
 	@echo "  make test-sahi         - SAHI小目标检测测试"
 	@echo "  make test-hiksdk       - HIKSDK测试"

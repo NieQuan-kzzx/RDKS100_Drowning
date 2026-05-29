@@ -41,6 +41,7 @@
 #include <chrono>
 #include <cmath>
 #include <iomanip>
+#include <numeric>
 // Third Party Libraries
 #include <opencv2/opencv.hpp>
 #include <opencv2/dnn/dnn.hpp>
@@ -179,31 +180,33 @@ int main()
         std::cout << "S100 YOLO model input should be 4D" << std::endl;
         return -1;
     }
-    // Step 4: 检查模型输出 - S100 YOLO 按照Readme导出后应该有6个输出
-    // Step 4: Check model output - S100 YOLO should have 6 outputs according to Readme
+    // Step 4: 检查模型输出 - ByteTrack 按照单输出格式导出
+    // Step 4: Check model output - ByteTrack should have 1 output
     int32_t output_count = 0;
     RDK_CHECK_SUCCESS(
         hbDNNGetOutputCount(&output_count, dnn_handle),
         "hbDNNGetOutputCount failed");
-    if (output_count != 6) {
-        std::cout << "S100 YOLO model should have 6 outputs, but got " << output_count << std::endl;
+    if (output_count != 1) {
+        std::cout << "ByteTrack model should have 1 output, but got " << output_count << std::endl;
         return -1;
     }
-    std::cout << "✓ S100 YOLO model has 6 outputs" << std::endl;
-    // 打印输出信息并获取正确的输出顺序
+    std::cout << "✓ ByteTrack model has 1 output" << std::endl;
+
+    // 打印输出信息
     std::cout << "\033[32m-> output tensors\033[0m" << std::endl;
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < output_count; i++) {
         hbDNNTensorProperties output_properties;
         RDK_CHECK_SUCCESS(
             hbDNNGetOutputTensorProperties(&output_properties, dnn_handle, i),
             "hbDNNGetOutputTensorProperties failed");
-        std::cout << "output[" << i << "] valid shape: (" 
-                  << output_properties.validShape.dimensionSize[0] << ", "
-                  << output_properties.validShape.dimensionSize[1] << ", "
-                  << output_properties.validShape.dimensionSize[2] << ", "
-                  << output_properties.validShape.dimensionSize[3] << "), "; 
+        std::cout << "output[" << i << "] valid shape: ("
+                << output_properties.validShape.dimensionSize[0] << ", "
+                << output_properties.validShape.dimensionSize[1] << ", "
+                << output_properties.validShape.dimensionSize[2] << ", "
+                << output_properties.validShape.dimensionSize[3] << "), ";
         std::cout << "QuantiType: " << output_properties.quantiType << std::endl;
     }
+
     // Step 5: 前处理 - 读取图像并转换为YUV420SP
     // Step 5: Preprocessing - Load image and convert to YUV420SP
     std::cout << "\033[32m-> Starting preprocessing\033[0m" << std::endl;
@@ -272,67 +275,75 @@ int main()
     // Step 6: 准备输入tensor
     // Step 6: Prepare input tensor
     std::vector<hbDNNTensor> input_tensors(input_count);
-    std::vector<hbDNNTensor> output_tensors(output_count);
-    // 分配输入内存
+    
+    // ByteTrack 模型只有 1 个输出
+    int actual_output_count = 1; 
+    std::vector<hbDNNTensor> output_tensors(actual_output_count);
+
+    // 分配输入内存 (ByteTrack有2个输入：Y分量和UV分量)
     for (int i = 0; i < input_count; i++) {
         // 复制输入tensor属性
-        input_tensors[i].properties = input_properties; 
+        input_tensors[i].properties = input_properties;
         int data_size;
         if (i == 0) {
-            // 第一个输入：Y分量 640x640x1
+            // 第一个输入：Y分量 608x1088x1
             data_size = input_H * input_W;
-            // 设置tensor的stride信息
             input_tensors[i].properties.validShape.dimensionSize[0] = 1;
             input_tensors[i].properties.validShape.dimensionSize[1] = input_H;
             input_tensors[i].properties.validShape.dimensionSize[2] = input_W;
             input_tensors[i].properties.validShape.dimensionSize[3] = 1;
-            // 设置stride 
-            input_tensors[i].properties.stride[3] = 1;                    // 每个元素1字节
-            input_tensors[i].properties.stride[2] = 1;                    // 通道步长 = stride[3] * size[3] = 1 * 1
-            input_tensors[i].properties.stride[1] = input_W;              // 行步长 = stride[2] * size[2] = 1 * 640 = 640
-            input_tensors[i].properties.stride[0] = input_W * input_H;    // 整个tensor = stride[1] * size[1] = 640 * 640 = 409600
+
+            input_tensors[i].properties.stride[3] = 1;
+            input_tensors[i].properties.stride[2] = 1;
+            input_tensors[i].properties.stride[1] = input_W;
+            input_tensors[i].properties.stride[0] = input_W * input_H;
         } else {
-            // 第二个输入：UV分量 320x320x2 (尺寸减半，2通道)
-            int uv_h = input_H / 2;  // 320
-            int uv_w = input_W / 2;  // 320
-            data_size = uv_h * uv_w * 2;  // UV两个通道
-            // 设置tensor的stride信息
+            // 第二个输入：UV分量 304x544x2 (尺寸减半，2通道)
+            int uv_h = input_H / 2;
+            int uv_w = input_W / 2;
+            data_size = uv_h * uv_w * 2;
+
             input_tensors[i].properties.validShape.dimensionSize[0] = 1;
             input_tensors[i].properties.validShape.dimensionSize[1] = uv_h;
-            input_tensors[i].properties.validShape.dimensionSize[2] = uv_w; 
+            input_tensors[i].properties.validShape.dimensionSize[2] = uv_w;
             input_tensors[i].properties.validShape.dimensionSize[3] = 2;
-            // 设置stride
-            input_tensors[i].properties.stride[3] = 1;                    // 每个元素1字节
-            input_tensors[i].properties.stride[2] = 2;                    // 通道步长 = stride[3] * size[3] = 1 * 2 = 2
-            input_tensors[i].properties.stride[1] = uv_w * 2;             // 行步长 = stride[2] * size[2] = 2 * 320 = 640
-            input_tensors[i].properties.stride[0] = uv_w * uv_h * 2;      // 整个tensor = stride[1] * size[1] = 640 * 320 = 204800
+
+            input_tensors[i].properties.stride[3] = 1;
+            input_tensors[i].properties.stride[2] = 2;
+            input_tensors[i].properties.stride[1] = uv_w * 2;
+            input_tensors[i].properties.stride[0] = uv_w * uv_h * 2;
         }
+
         // 分配内存
         hbUCPMallocCached(&input_tensors[i].sysMem, data_size, 0);
-        std::cout << "✓ Input tensor " << i << " memory allocated: " << data_size << " bytes" << std::endl; 
+        std::cout << "✓ Input tensor " << i << " memory allocated: " << data_size << " bytes" << std::endl;
+
         // 复制数据
         if (i == 0) {
-            // 第一个输入：复制Y分量
             memcpy(input_tensors[i].sysMem.virAddr, ynv12, input_H * input_W);
             std::cout << "✓ Y component data copied to tensor " << i << std::endl;
         } else {
-            // 第二个输入：复制UV分量 
-            uint8_t *uv_src = ynv12 + input_H * input_W;  // UV数据在Y之后
+            uint8_t *uv_src = ynv12 + input_H * input_W;
             memcpy(input_tensors[i].sysMem.virAddr, uv_src, data_size);
             std::cout << "✓ UV component data copied to tensor " << i << std::endl;
-        }     
+        }
+
         // 刷新内存
         hbUCPMemFlush(&input_tensors[i].sysMem, HB_SYS_MEM_CACHE_CLEAN);
     }
-    // 分配输出内存
-    for (int i = 0; i < output_count; i++) {
-        hbDNNTensorProperties &output_properties = output_tensors[i].properties;
+
+    // 分配输出内存 (只有1个输出)
+    for (int i = 0; i < actual_output_count; i++) {
+        hbDNNTensorProperties output_properties;
         hbDNNGetOutputTensorProperties(&output_properties, dnn_handle, i);
+        output_tensors[i].properties = output_properties;
+        
         int out_aligned_size = output_properties.alignedByteSize;
         hbUCPSysMem &mem = output_tensors[i].sysMem;
         hbUCPMallocCached(&mem, out_aligned_size, 0);
         std::cout << "✓ Output tensor " << i << " memory allocated: " << out_aligned_size << " bytes" << std::endl;
     }
+
     // Step 7: 推理
     // Step 7: Inference
     std::cout << "\033[32m-> Starting inference\033[0m" << std::endl;
@@ -370,88 +381,110 @@ int main()
     std::cout << "\033[31m forward time = " << std::fixed << std::setprecision(2) 
               << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - begin_time).count() / 1000.0 
               << " ms\033[0m" << std::endl;
-    // Step 8: 后处理 - 适配动态分辨率 (2560x1440 等)
-    // Step 8: Post-processing - Adapting to dynamic resolution
+        
+    // Step 8: 后处理 - ByteTrack (YOLOX架构) 真正的终局修复版
+    // Step 8: Post-processing - The Real Final Fix
     std::cout << "\033[32m-> Starting post-processing\033[0m" << std::endl;
     begin_time = std::chrono::system_clock::now();
 
-    // 计算置信度阈值的原始值 (Sigmoid 逆运算)
-    float CONF_THRES_RAW = -std::log(1.0f / SCORE_THRESHOLD - 1.0f);
+    // 刷新BPU内存
+    hbUCPMemFlush(&(output_tensors[0].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
+
+    hbDNNTensorProperties &out_prop = output_tensors[0].properties;
+    auto *raw_data = reinterpret_cast<uint8_t *>(output_tensors[0].sysMem.virAddr);
 
     std::vector<cv::Rect2d> all_bboxes;
     std::vector<float> all_scores;
     std::vector<int> all_ids;
 
-    // 遍历 YOLO 的 3 个特征层 (Stride 8, 16, 32)
-    // Iterate through 3 YOLO feature layers
-    for (int i = 0; i < 3; i++) {
-        int cls_idx = i * 2;     // 类别输出索引: 0, 2, 4
-        int bbox_idx = i * 2 + 1; // 框回归输出索引: 1, 3, 5
-        int stride = (i == 0) ? 8 : (i == 1) ? 16 : 32;
-
-        // 获取当前层的属性以确定特征图尺寸 (grid_h, grid_w)
-        // Get layer properties to determine feature map size
-        hbDNNTensorProperties cls_prop, bbox_prop;
-        hbDNNGetOutputTensorProperties(&cls_prop, dnn_handle, cls_idx);
-        hbDNNGetOutputTensorProperties(&bbox_prop, dnn_handle, bbox_idx);
-
-        int grid_h = cls_prop.validShape.dimensionSize[1];
-        int grid_w = cls_prop.validShape.dimensionSize[2];
-        
-        // 刷新缓存确保数据同步
-        hbUCPMemFlush(&(output_tensors[cls_idx].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
-        hbUCPMemFlush(&(output_tensors[bbox_idx].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
-
-        auto *cls_data = reinterpret_cast<float *>(output_tensors[cls_idx].sysMem.virAddr);
-        auto *bbox_data = reinterpret_cast<int32_t *>(output_tensors[bbox_idx].sysMem.virAddr);
-        auto *bbox_scale = reinterpret_cast<float *>(bbox_prop.scale.scaleData);
-
-        // 动态遍历当前特征层的所有网格
-        // Dynamically traverse all grids of the current feature layer
+    // --- 1. 构建 608x1088 输入尺寸下的 YOLOX 网格坐标 ---
+    struct GridAndStride {
+        int grid_x;
+        int grid_y;
+        int stride;
+    };
+    std::vector<GridAndStride> grid_strides;
+    int strides[3] = {8, 16, 32};
+    for (int s = 0; s < 3; s++) {
+        int stride = strides[s];
+        int grid_h = 608 / stride;
+        int grid_w = 1088 / stride;
         for (int h = 0; h < grid_h; h++) {
             for (int w = 0; w < grid_w; w++) {
-                int anchor_idx = h * grid_w + w;
-                float *cur_cls = cls_data + anchor_idx * CLASSES_NUM;
-
-                // 1. 寻找最大得分及其类别
-                int max_cls_id = 0;
-                for (int c = 1; c < CLASSES_NUM; c++) {
-                    if (cur_cls[c] > cur_cls[max_cls_id]) max_cls_id = c;
-                }
-
-                // 2. 原始分数阈值过滤
-                if (cur_cls[max_cls_id] < CONF_THRES_RAW) continue;
-
-                // 3. DFL 解析边界框距离 (ltrb)
-                int32_t *cur_bbox = bbox_data + anchor_idx * (REG * 4);
-                float ltrb[4];
-                for (int k = 0; k < 4; k++) {
-                    float dfl_values[REG], softmax_values[REG];
-                    for (int j = 0; j < REG; j++) {
-                        // 反量化 BPU 输出的 int32 数据
-                        dfl_values[j] = float(cur_bbox[k * REG + j]) * bbox_scale[k * REG + j];
-                    }
-                    softmax(dfl_values, softmax_values, REG);
-                    ltrb[k] = 0.0f;
-                    for (int j = 0; j < REG; j++) ltrb[k] += softmax_values[j] * j;
-                }
-
-                // 4. 坐标转换: 基于网格中心点 (w+0.5, h+0.5)
-                // Coordinate transformation based on grid center
-                double x1 = (w + 0.5f - ltrb[0]) * stride;
-                double y1 = (h + 0.5f - ltrb[1]) * stride;
-                double x2 = (w + 0.5f + ltrb[2]) * stride;
-                double y2 = (h + 0.5f + ltrb[3]) * stride;
-
-                if (x2 > x1 && y2 > y1) {
-                    float score = 1.0f / (1.0f + std::exp(-cur_cls[max_cls_id]));
-                    all_bboxes.push_back(cv::Rect2d(x1, y1, x2 - x1, y2 - y1));
-                    all_scores.push_back(score);
-                    all_ids.push_back(max_cls_id);
-                }
+                grid_strides.push_back({w, h, stride});
             }
         }
     }
+
+    int num_preds = 13566;      // 锚点总数
+
+    // --- 2. 利用底层 Stride 精确读取数据 ---
+    auto get_value = [&](int i, int c) -> float {
+        uint8_t* ptr = raw_data + i * out_prop.stride[1] + c * out_prop.stride[2];
+        return *reinterpret_cast<float*>(ptr);
+    };
+
+    // 核心修复：BPU 将 6 通道输出填充到了 8 通道！
+    // Channel 4 和 5 是 BPU 填充的垃圾数据 (min=0.00)
+    // 真正的 obj 和 cls 被挤到了 Channel 6 和 7！
+    // 因为 Sigmoid(0) = 0.5，背景框的分数为 0.5 * 0.5 = 0.25。
+    // 为了过滤掉这成千上万个背景框，必须将阈值提高到 0.40 以上！
+    float HARD_SCORE_THRESHOLD = 0.40f; 
+
+    // --- 3. 遍历解码 ---
+    for (int i = 0; i < num_preds; i++) {
+        float dx = get_value(i, 0);
+        float dy = get_value(i, 1);
+        float dw = get_value(i, 2);
+        float dh = get_value(i, 3);
+        
+        float obj_logit = get_value(i, 6);
+        float cls_logit = get_value(i, 7);
+        
+        // 最终分数 = sigmoid(obj) * sigmoid(cls)
+        float obj_conf = 1.0f / (1.0f + std::exp(-obj_logit));
+        float cls_conf = 1.0f / (1.0f + std::exp(-cls_logit));
+        float score = obj_conf * cls_conf;
+
+        if (score >= HARD_SCORE_THRESHOLD) {
+            int grid_x = grid_strides[i].grid_x;
+            int grid_y = grid_strides[i].grid_y;
+            int stride = grid_strides[i].stride;
+
+            // YOLOX 官方标准解码公式
+            float cx = (1.0f / (1.0f + std::exp(-dx)) * 2.0f - 0.5f + grid_x) * stride;
+            float cy = (1.0f / (1.0f + std::exp(-dy)) * 2.0f - 0.5f + grid_y) * stride;
+            float w  = std::exp(dw) * stride;
+            float h  = std::exp(dh) * stride;
+
+            // cxcywh 转 xyxy
+            float x1 = cx - w / 2.0f;
+            float y1 = cy - h / 2.0f;
+            float x2 = cx + w / 2.0f;
+            float y2 = cy + h / 2.0f;
+
+            // 合法性检查
+            if (x2 > x1 && y2 > y1 && w > 2.0f && h > 2.0f) {
+                all_bboxes.push_back(cv::Rect2d(x1, y1, x2 - x1, y2 - y1));
+                all_scores.push_back(score);
+                all_ids.push_back(0); // 单类模型
+            }
+        }
+    }
+
+    // 调试信息：打印前 5 个最高分的框
+    std::cout << "\033[33m[DEBUG] Decoded boxes (Top 5 scores):\033[0m" << std::endl;
+    std::vector<size_t> indices(all_scores.size());
+    for (size_t i = 0; i < indices.size(); ++i) indices[i] = i;
+    std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) { return all_scores[a] > all_scores[b]; });
+    for (int i = 0; i < std::min((size_t)5, indices.size()); ++i) {
+        int idx = indices[i];
+        std::cout << "Score: " << all_scores[idx] 
+                  << ", Box: " << all_bboxes[idx].x << " " << all_bboxes[idx].y << " " 
+                  << all_bboxes[idx].width << " " << all_bboxes[idx].height << std::endl;
+    }
+
+
 
     // Step 9: 分类别 NMS 处理 (保持原逻辑不变)
     // Step 9: Class-wise NMS processing

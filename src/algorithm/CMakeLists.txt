@@ -1,5 +1,6 @@
 # 1. 搜集所有源文件 (保持不变)
-file(GLOB_RECURSE ALGO_SRCS 
+file(GLOB_RECURSE ALGO_SRCS     
+    "${CMAKE_CURRENT_SOURCE_DIR}/botsort/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/bytetrack/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_pose/src/*.cc"
@@ -15,6 +16,7 @@ add_library(lib_algorithm SHARED ${ALGO_SRCS})
 # 会自动获得这些 include 路径，不需要在其他地方重复写了。
 target_include_directories(lib_algorithm
 PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/botsort/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/bytetrack/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_pose/include"
