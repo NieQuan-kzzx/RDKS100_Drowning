@@ -15,17 +15,17 @@
 // Google Flags库，#include "gflags/gflags.h"。
 // 这里的 DEFINE_string 是 gflags 库（Google Flags）中定义命令行参数的一个宏。
 // 参数分别为：变量名，默认参数，说明文字
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/yolo11s_mot.hbm",
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm",
               "Path to BPU Quantized *.hbm model file");
 DEFINE_string(test_img, "/home/sunrise/Desktop/test_bmp/1.jpg",
               "Path to load the test image.");
-DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/mot20_01.mp4",
+DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/1min_mot.mp4",
               "Path to input video file. If set, video mode will be used.");
-DEFINE_string(output_video, "bytetrack_mot20_01.mp4",
+DEFINE_string(output_video, "Zuoshiyan.mp4",
               "Path to save processed output video.");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_mot.names",
               "Path to load ImageNet label mapping file.");
-DEFINE_double(score_thres, 0.25, "Confidence score threshold for filtering detections.");
+DEFINE_double(score_thres, 0.3, "Confidence score threshold for filtering detections.");
 DEFINE_double(nms_thres, 0.7, "IoU threshold for Non-Maximum Suppression.");
 
 int main(int argc, char **argv)
