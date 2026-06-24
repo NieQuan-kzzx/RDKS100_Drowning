@@ -55,8 +55,8 @@ MainWindow::~MainWindow()
 
 void MainWindow::initSystems()
 {
-    m_cam_1 = new RTSPCamera("rtsp://127.0.0.1/assets/zuoshiyan.h264", 1920, 1080, 10, 0, false);
-    m_cam_2 = new RTSPCamera("rtsp://127.0.0.1/assets/test111.h264", 1920, 1080, 10, 0, false);
+    m_cam_1 = new RTSPCamera("rtsp://127.0.0.1/assets/zuoshiyan.h264", 1920, 1080, 25, 0, false, RTSPCamera::HARDWARE);
+    m_cam_2 = new RTSPCamera("rtsp://127.0.0.1/assets/test111.h264", 1920, 1080, 25, 0, false, RTSPCamera::SOFTWARE);
     m_pool = new ThreadPool(4);
     m_coordinator_1 = new DetectionCoordinator(m_cam_1, 1, this);
     m_coordinator_2 = new DetectionCoordinator(m_cam_2, 2, this);
@@ -112,31 +112,33 @@ void MainWindow::on_btnConfirm_clicked()
     QString selectedMode_2 = ui->comboBoxModels_2->currentText();
     
     // 默认模型路径
-    std::string modelType_1 = "YOLO", modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
-    std::string modelType_2 = "YOLO", modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/new_UnderSurface_1920x1080.hbm";
+    std::string modelType_1 = "YOLO", modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/MyMot_Big.hbm";
+    std::string modelType_2 = "YOLO", modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
 
     // 模型选择逻辑 (Cam 1)
     if (selectedMode_1.contains("游泳检测")) {
         modelType_1 = "SWIMMER";
         modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm";
     } else if (selectedMode_1.contains("进水检测")) {
-        modelType_1 = "Patchcore";
-        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
+        modelType_1 = "YOLOSEG";
+        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_seg.hbm";
     } else if (selectedMode_1.contains("溺水检测")) {
         modelType_1 = "YOLO";
-        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
+        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/MyMot_Big.hbm";
     }
-
+    // } else if (selectedMode_1.contains("进水检测")) {
+    // modelType_1 = "Patchcore";
+    // modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
     // 模型选择逻辑 (Cam 2)
     if (selectedMode_2.contains("游泳检测")) {
         modelType_2 = "SWIMMER";
         modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm";
     } else if (selectedMode_2.contains("进水检测")) {
-        modelType_2 = "Patchcore";
-        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
+        modelType_2 = "YOLOSEG";
+        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_seg.hbm";
     } else if (selectedMode_2.contains("溺水检测")) {
         modelType_2 = "YOLO";
-        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/new_UnderSurface_1920x1080.hbm";
+        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11s.hbm";
     }
 
     // 修正：改用 m_coordinator 切换模型

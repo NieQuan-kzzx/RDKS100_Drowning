@@ -3,8 +3,8 @@
 
 BYTETracker::BYTETracker(int frame_rate, int track_buffer)
 {
-	track_thresh = 0.25;
-	high_thresh = 0.25;
+	track_thresh = 0.5;
+	high_thresh = 0.6;
 	match_thresh = 0.8;
 
 	frame_id = 0;

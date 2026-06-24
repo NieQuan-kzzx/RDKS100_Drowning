@@ -18,7 +18,10 @@ namespace Inf {
         float score;
         int class_id;
         int track_id = -1;
+        // 特征点检测
         std::vector<Keypoint> keypoints;
+        // 实例分割
+        cv::Mat mask;
     };
     // 这是基类的推理，提供几个公共的接口，便于后续的多态实现
     class BaseInfer {

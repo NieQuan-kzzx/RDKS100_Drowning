@@ -1,6 +1,7 @@
 #include "AIInferenceManager.h"
 #include "Yolo11Infer.h"
 #include "Patchcore.h"
+#include "YoloSeg.h"
 #include "DrowningUnderSurface.h"
 #include "DrowningState.h"
 #include <plog/Log.h>
@@ -28,16 +29,9 @@ AIInferenceManager::~AIInferenceManager() {
 }
 
 bool AIInferenceManager::switchModel(const std::string& type, const std::string& path) {
-    if (m_isRunning.load()) {
-        stopInference();
-    }
-
-    std::lock_guard<std::mutex> lock(m_engineMutex);
     PLOGI << "AIInferenceManager: Switching model to: " << type;
 
-    m_inferEngine.reset();
-    m_currentLogic.reset();
-
+    // 1. Create new engine and logic (outside mutex, may block on BPU init)
     std::unique_ptr<Inf::BaseInfer> nextEngine;
     std::unique_ptr<LogicBase> nextLogic;
 
@@ -65,25 +59,35 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
     else if (type == "Patchcore") {
         nextEngine = std::make_unique<Inf::Patchcore>();
     }
+    else if (type == "YOLOSEG") {
+        auto yolo = std::make_unique<Inf::YoloSeg>();
+        yolo->setLabels({"water"});
+        nextEngine = std::move(yolo);
+        // nextLogic = std::make_unique<DrowningUnderSurface>();
+    }
     else {
         PLOGE << "AIInferenceManager: Unknown model type: " << type;
         return false;
     }
 
-    if (nextEngine && nextEngine->init(path)) {
+    if (!nextEngine || !nextEngine->init(path)) {
+        PLOGE << "AIInferenceManager: Failed to init model for " << type;
+        emit inferenceError("Failed to switch model: " + QString::fromStdString(type));
+        return false;
+    }
+
+    // 2. Atomically swap engines under mutex — inference loop picks it up next frame
+    {
+        std::lock_guard<std::mutex> lock(m_engineMutex);
         m_inferEngine = std::move(nextEngine);
         m_currentLogic = std::move(nextLogic);
         m_currentModelType = type;
         m_currentModelPath = path;
-
-        PLOGI << "AIInferenceManager: Model switched successfully to " << type;
-        emit modelSwitched(QString::fromStdString(type));
-        return true;
     }
 
-    PLOGE << "AIInferenceManager: Failed to switch model to " << type;
-    emit inferenceError("Failed to switch model: " + QString::fromStdString(type));
-    return false;
+    PLOGI << "AIInferenceManager: Model switched successfully to " << type;
+    emit modelSwitched(QString::fromStdString(type));
+    return true;
 }
 
 void AIInferenceManager::startInference() {
@@ -155,10 +159,10 @@ void AIInferenceManager::submitFrame(const cv::Mat& frame) {
 void AIInferenceManager::inferenceLoop() {
     PLOGI << "AIInferenceManager: Inference loop started";
 
-    if (m_inferEngine == nullptr) {
-        PLOGE << "No model loaded, thread exiting!";
-        return; 
-    }
+    // Engine is validated under m_engineMutex in startInference()
+    // before the thread is created, and swapModel() provides the new
+    // engine atomically under the same mutex. The in-loop check below
+    // handles the nullptr case safely under the lock.
 
     while (m_isRunning.load()) {
         // 1. 从队列获取帧

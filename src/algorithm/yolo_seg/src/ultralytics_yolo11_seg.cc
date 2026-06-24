@@ -18,16 +18,6 @@
 #include <omp.h>
 
 /**
- * @brief Stride per detection head (from high to low resolution).
- */
-std::vector<int> strides       = {8, 16, 32};
-
-/**
- * @brief Feature-map grid size per detection head (e.g., for ~640 input: 80/40/20).
- */
-std::vector<int> anchor_sizes  = {80, 40, 20};
-
-/**
  * @brief Fixed bin offsets for DFL (0..15).
  */
 std::vector<int> weights_static = {
@@ -61,7 +51,6 @@ void filter_and_decode_detections_mces(
     const hbDNNTensor& bbox_tensor,
     const hbDNNTensor& mces_tensor,
     float conf_thres_raw,
-    int grid_size,
     int stride,
     const std::vector<int>& weights_static,
     std::vector<Detection>& detections,
@@ -120,13 +109,22 @@ void filter_and_decode_detections_mces(
                 float anchor_y = 0.5f + h;
                 float ltrb[4] = {0, 0, 0, 0};
 
+                bool bbox_is_f32 = (bbox_tensor.properties.tensorType == HB_DNN_TENSOR_TYPE_F32 &&
+                                    bbox_tensor.properties.quantiType == NONE);
+
                 for (int side = 0; side < 4; ++side) {
                     float bins[16];
                     for (int bin = 0; bin < 16; ++bin) {
                         int channel = side * 16 + bin;
-                        const int32_t* ptr_bbox = reinterpret_cast<const int32_t*>(
-                            data_bbox + base_bbox_offset + channel * stride_bbox[3]);
-                        bins[bin] = dequant_value(*ptr_bbox, channel, bbox_tensor.properties);
+                        if (bbox_is_f32) {
+                            const float* ptr_bbox = reinterpret_cast<const float*>(
+                                data_bbox + base_bbox_offset + channel * stride_bbox[3]);
+                            bins[bin] = *ptr_bbox;
+                        } else {
+                            const int32_t* ptr_bbox = reinterpret_cast<const int32_t*>(
+                                data_bbox + base_bbox_offset + channel * stride_bbox[3]);
+                            bins[bin] = dequant_value(*ptr_bbox, channel, bbox_tensor.properties);
+                        }
                     }
                     // Softmax over bins (max-trick for numerical stability)
                     float max_bin = bins[0];
@@ -143,12 +141,21 @@ void filter_and_decode_detections_mces(
                 det.bbox[2] = (anchor_x + ltrb[2]) * stride;
                 det.bbox[3] = (anchor_y + ltrb[3]) * stride;
 
-                // 3) Read MCES vector (32 channels), dequantize per-channel
-                std::vector<float> mces_vec(32);
-                for (int d = 0; d < 32; ++d) {
-                    const int32_t* ptr_mces = reinterpret_cast<const int32_t*>(
-                        data_mces + base_mces_offset + d * stride_mces[3]);
-                    mces_vec[d] = dequant_value(*ptr_mces, d, mces_tensor.properties);
+                // 3) Read MCES vector, dequantize per-channel
+                int mces_channels = mces_tensor.properties.validShape.dimensionSize[3];
+                std::vector<float> mces_vec(mces_channels);
+                bool mces_is_f32 = (mces_tensor.properties.tensorType == HB_DNN_TENSOR_TYPE_F32 &&
+                                    mces_tensor.properties.quantiType == NONE);
+                for (int d = 0; d < mces_channels; ++d) {
+                    if (mces_is_f32) {
+                        const float* ptr_mces = reinterpret_cast<const float*>(
+                            data_mces + base_mces_offset + d * stride_mces[3]);
+                        mces_vec[d] = *ptr_mces;
+                    } else {
+                        const int32_t* ptr_mces = reinterpret_cast<const int32_t*>(
+                            data_mces + base_mces_offset + d * stride_mces[3]);
+                        mces_vec[d] = dequant_value(*ptr_mces, d, mces_tensor.properties);
+                    }
                 }
 
                 dets_local.push_back(det);
@@ -542,11 +549,19 @@ YOLO11_Seg::post_process(float score_thres, float nms_thres, int img_w, int img_
     std::vector<Detection> all_detections;
     std::vector<std::vector<float>> all_mces_data;
 
+    int num_heads = output_count_ / 3;
+
     // Each head: [cls, bbox, mces]
-    for (size_t s = 0; s < strides.size(); ++s) {
+    for (int s = 0; s < num_heads; ++s) {
         const hbDNNTensor& cls_tensor  = output_tensors_[3*s + 0];
         const hbDNNTensor& bbox_tensor = output_tensors_[3*s + 1];
         const hbDNNTensor& mces_tensor = output_tensors_[3*s + 2];
+
+        int grid_h = cls_tensor.properties.validShape.dimensionSize[1];
+        int grid_w = cls_tensor.properties.validShape.dimensionSize[2];
+        int stride_h = input_h_ / grid_h;
+        int stride_w = input_w_ / grid_w;
+        int stride = (stride_h + stride_w) / 2;
 
         std::vector<Detection> dets;
         std::vector<std::vector<float>> mces;
@@ -554,7 +569,7 @@ YOLO11_Seg::post_process(float score_thres, float nms_thres, int img_w, int img_
         filter_and_decode_detections_mces(
             cls_tensor, bbox_tensor, mces_tensor,
             conf_thres_raw,
-            anchor_sizes[s], strides[s],
+            stride,
             weights_static,
             dets, mces
         );
@@ -571,11 +586,16 @@ YOLO11_Seg::post_process(float score_thres, float nms_thres, int img_w, int img_
     // NMS with MCES kept in sync
     auto [final_dets, final_mces] = nms_bboxes_mces(all_detections, all_mces_data, nms_thres);
 
-    // Dequantize prototype features (NHWC), e.g., output_tensors_[9] as protos
-    auto protos = dequantize_s16_axis0(output_tensors_[9]);
+    // Dequantize prototype features (NHWC), positioned after all detection heads
+    int proto_idx = num_heads * 3;
+    auto protos = dequantize_s16_axis0(output_tensors_[proto_idx]);
+
+    // Read actual proto mask dimensions from the output tensor shape
+    int proto_mask_h = output_tensors_[proto_idx].properties.validShape.dimensionSize[1];
+    int proto_mask_w = output_tensors_[proto_idx].properties.validShape.dimensionSize[2];
 
     // Decode per-instance masks in proto scale
-    auto masks = decode_masks(final_dets, final_mces, protos, input_w_, input_h_, 160, 160, 0.5f);
+    auto masks = decode_masks(final_dets, final_mces, protos, input_w_, input_h_, proto_mask_w, proto_mask_h, 0.5f);
 
     // Map boxes back to original image (inverse letterbox)
     scale_letterbox_bboxes_back(final_dets, img_w, img_h, input_w_, input_h_);

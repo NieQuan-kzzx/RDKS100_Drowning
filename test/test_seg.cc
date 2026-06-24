@@ -6,11 +6,11 @@
 #include "ultralytics_yolo11_seg.hpp"
 #include "common_utils.hpp"
 
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_seg.hbm",
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/YOLO11n-seg.hbm",
               "Path to BPU Quantized *.hbm model file");
-DEFINE_string(test_img, "/home/sunrise/Desktop/RDKS100_Drowning/tem/test_patchcore.jpg",
+DEFINE_string(test_img, "/home/sunrise/Desktop/RDKS100_Drowning/tem/bus.jpg",
               "Path to load the test image.");
-DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_water_seg.names",
+DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_coco.names",
               "Path to load COCO label mapping file.");
 DEFINE_double(score_thres, 0.25, "Confidence score threshold for filtering detections.");
 DEFINE_double(nms_thres, 0.7, "IoU threshold for Non-Maximum Suppression.");

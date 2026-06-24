@@ -7,11 +7,11 @@
 #include "common_utils.hpp"
 
 // 修改或新增相关的命令行参数
-DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_seg.hbm",
+DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm",
               "Path to BPU Quantized *.hbm model file");
-DEFINE_string(video_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/4.mp4",
+DEFINE_string(video_path, "/home/sunrise/Desktop/RDKS100_Drowning/tem/test_06.mp4",
               "Path to load the test video file (or camera index like '0').");
-DEFINE_string(output_path, "water_seg_result.mp4", 
+DEFINE_string(output_path, "water_seg_result_3.mp4", 
               "Path to save the processed output video.");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_water_seg.names",
               "Path to load COCO label mapping file.");

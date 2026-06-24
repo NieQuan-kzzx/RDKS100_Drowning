@@ -106,9 +106,12 @@ bool DetectionCoordinator::switchModel(const std::string& type, const std::strin
     bool success = m_inferenceManager->switchModel(type, path);
 
     if (success && m_isRunning.load()) {
-        // 如果系统正在运行，重新启动推理
-        m_inferenceManager->stopInference();
-        m_inferenceManager->startInference();
+        if (!m_inferenceManager->isRunning()) {
+            // 首次加载模型（初始为 NONE），启动推理线程
+            m_inferenceManager->startInference();
+        }
+        // 后续切换：引擎已在 switchModel 内原子交换，
+        // 推理线程下一帧自动用新引擎，无需停启线程
     }
 
     return success;

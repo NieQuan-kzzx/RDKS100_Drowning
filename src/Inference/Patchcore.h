@@ -28,6 +28,8 @@ private:
 
     // 算法参数与缓存
     float threshold_ = 50.0f;
+    int model_input_w_ = 224;
+    int model_input_h_ = 224;
     cv::Mat m_current_amap; // 缓存热力图用于 draw 接口
 
     // 内存池优化

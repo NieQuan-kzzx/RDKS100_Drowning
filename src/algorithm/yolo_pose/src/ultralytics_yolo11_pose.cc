@@ -18,16 +18,6 @@
 #include <omp.h>
 
 /**
- * @brief Stride per detection head (from high to low resolution).
- */
-static std::vector<int> strides       = {8, 16, 32};
-
-/**
- * @brief Feature-map grid size per detection head (e.g., ~640 input -> 80/40/20).
- */
-static std::vector<int> anchor_sizes  = {80, 40, 20};
-
-/**
  * @brief Fixed bin offsets for DFL (0..15).
  */
 static std::vector<int> weights_static = {
@@ -48,7 +38,6 @@ static std::vector<int> weights_static = {
  * @param bbox_tensor   [in]  BBox distribution tensor (N,H,W,64), float (DFL bins).
  * @param kpts_tensor   [in]  Keypoints tensor (N,H,W,51 = 17×(dx,dy,score)), float.
  * @param conf_thres_raw[in]  Confidence threshold in logit space (pre-sigmoid).
- * @param grid_size     [in]  Feature map size for this head (e.g., 80/40/20).
  * @param stride        [in]  Input stride for this head (e.g., 8/16/32).
  * @param weights_static[in]  DFL bin offsets (0..15).
  * @param detections    [out] Decoded detections appended here.
@@ -59,7 +48,6 @@ void filter_and_decode_detections_kpts(
     const hbDNNTensor& bbox_tensor,
     const hbDNNTensor& kpts_tensor,
     float conf_thres_raw,
-    int grid_size,
     int stride,
     const std::vector<int>& weights_static,
     std::vector<Detection>& detections,
@@ -139,8 +127,9 @@ void filter_and_decode_detections_kpts(
                 det.bbox[3] = (anchor_y + ltrb[3]) * stride;
 
                 // 3) Keypoints decode: (dx, dy, score) per keypoint
-                std::vector<Keypoint> kpts_vec(17);
-                for (int k = 0; k < 17; ++k) {
+                int num_kpts = kpts_tensor.properties.validShape.dimensionSize[3] / 3;
+                std::vector<Keypoint> kpts_vec(num_kpts);
+                for (int k = 0; k < num_kpts; ++k) {
                     const int base_ch = 3 * k; // layout: [dx, dy, score]
                     const float* ptr_k = reinterpret_cast<const float*>(
                         data_kpts + base_kpts_offset + base_ch * stride_kpts[3]);
@@ -368,16 +357,23 @@ YOLO11_Pose::post_process(float score_thres, float nms_thres, float kpt_conf_thr
     std::vector<std::vector<Keypoint>> all_kpts_data;
 
     // Each head contributes [cls, bbox, kpts]
-    for (size_t s = 0; s < strides.size(); ++s) {
+    int num_heads = output_count_ / 3;
+    for (int s = 0; s < num_heads; ++s) {
         const hbDNNTensor& cls_tensor  = output_tensors_[3*s + 0];
         const hbDNNTensor& bbox_tensor = output_tensors_[3*s + 1];
         const hbDNNTensor& kpts_tensor = output_tensors_[3*s + 2];
 
+        int grid_h = cls_tensor.properties.validShape.dimensionSize[1];
+        int grid_w = cls_tensor.properties.validShape.dimensionSize[2];
+        int stride_h = input_h_ / grid_h;
+        int stride_w = input_w_ / grid_w;
+        int stride = (stride_h + stride_w) / 2;
+
         std::vector<Detection> dets;
         std::vector<std::vector<Keypoint>> keypoint;
 
-        filter_and_decode_detections_kpts(cls_tensor, bbox_tensor, kpts_tensor,conf_thres_raw,
-                                          anchor_sizes[s], strides[s], weights_static, dets, keypoint);
+        filter_and_decode_detections_kpts(cls_tensor, bbox_tensor, kpts_tensor, conf_thres_raw,
+                                          stride, weights_static, dets, keypoint);
 
         // Merge results
         all_detections.insert(all_detections.end(),

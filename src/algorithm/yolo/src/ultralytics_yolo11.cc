@@ -18,17 +18,6 @@
 #include <omp.h>
 
 /**
- * @brief Stride per detection head (from high to low resolution).
- */
-static std::vector<int> strides       = {8, 16, 32};
-
-/**
- * @brief Feature-map grid size per detection head.
- * Typical heads are 80x80 / 40x40 / 20x20.
- */
-static std::vector<int> anchor_sizes  = {80, 40, 20};
-
-/**
  * @brief Fixed bin offsets for DFL (0..15).
  */
 static std::vector<int> weights_static = {
@@ -59,7 +48,6 @@ void filter_and_decode_detections(
     const hbDNNTensor& cls_tensor,
     const hbDNNTensor& bbox_tensor,
     float conf_thres_raw,
-    int grid_size,
     int stride,
     const std::vector<int>& weights_static,
     std::vector<Detection>& detections)
@@ -114,13 +102,22 @@ void filter_and_decode_detections(
                 float anchor_y = 0.5f + h;
                 float ltrb[4] = {0, 0, 0, 0};
 
+                bool bbox_is_f32 = (bbox_tensor.properties.tensorType == HB_DNN_TENSOR_TYPE_F32 &&
+                                    bbox_tensor.properties.quantiType == NONE);
+
                 for (int side = 0; side < 4; ++side) {
                     float bins[16];
                     for (int bin = 0; bin < 16; ++bin) {
                         int channel = side * 16 + bin;
-                        const int32_t* ptr_bbox = reinterpret_cast<const int32_t*>(
-                            data_bbox + base_bbox_offset + channel * stride_bbox[3]);
-                        bins[bin] = dequant_value(*ptr_bbox, channel, bbox_tensor.properties);
+                        if (bbox_is_f32) {
+                            const float* ptr_bbox = reinterpret_cast<const float*>(
+                                data_bbox + base_bbox_offset + channel * stride_bbox[3]);
+                            bins[bin] = *ptr_bbox;
+                        } else {
+                            const int32_t* ptr_bbox = reinterpret_cast<const int32_t*>(
+                                data_bbox + base_bbox_offset + channel * stride_bbox[3]);
+                            bins[bin] = dequant_value(*ptr_bbox, channel, bbox_tensor.properties);
+                        }
                     }
 
                     // Softmax over bins (max trick for stability)
@@ -302,14 +299,22 @@ std::vector<Detection> YOLO11::post_process(float score_thres, float nms_thres, 
 
     std::vector<Detection> all_detections;
 
+    int num_heads = output_count_ / 2;
+
     // Each head contributes [cls_head, bbox_head]
-    for (size_t s = 0; s < strides.size(); ++s) {
+    for (int s = 0; s < num_heads; ++s) {
         const hbDNNTensor& cls_tensor  = output_tensors_[2*s + 0];
         const hbDNNTensor& bbox_tensor = output_tensors_[2*s + 1];
 
+        int grid_h = cls_tensor.properties.validShape.dimensionSize[1];
+        int grid_w = cls_tensor.properties.validShape.dimensionSize[2];
+        int stride_h = input_h_ / grid_h;
+        int stride_w = input_w_ / grid_w;
+        int stride = (stride_h + stride_w) / 2;
+
         std::vector<Detection> dets;
         filter_and_decode_detections(cls_tensor, bbox_tensor, conf_thres_raw,
-                                     anchor_sizes[s], strides[s], weights_static, dets);
+                                     stride, weights_static, dets);
 
         // Merge head results
         all_detections.insert(all_detections.end(),

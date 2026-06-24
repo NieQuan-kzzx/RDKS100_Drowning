@@ -12,17 +12,12 @@ const std::string Patchcore::PREPROCESS_YUV_KEY = "preprocess_yuv";
 Patchcore::Patchcore()
     : m_matPool(MatPoolManager::getPool(cv::Size(224, 224), CV_8UC3)) {
     PlogInitializer::getInstance().init(plog::verbose);
-
-    // 预分配固定尺寸的Mat
-    resized_rgb_ = m_matPool.getMat(cv::Size(224, 224), CV_8UC3);
-    yuv420p_ = m_matPool.getMat(cv::Size(224, 224 * 3 / 2), CV_8UC1);
 }
 
 Patchcore::~Patchcore() {
     cleanup();
-    // 归还预分配的Mat到内存池
-    m_matPool.returnMat(resized_rgb_);
-    m_matPool.returnMat(yuv420p_);
+    if (!resized_rgb_.empty()) m_matPool.returnMat(resized_rgb_);
+    if (!yuv420p_.empty()) m_matPool.returnMat(yuv420p_);
 }
 
 bool Patchcore::init(const std::string& model_path) {
@@ -48,31 +43,40 @@ void Patchcore::setupTensors() {
     inputs_.resize(input_count);
     outputs_.resize(output_count);
 
+    // Read model input dimensions from first input tensor
+    hbDNNGetInputTensorProperties(&inputs_[0].properties, dnn_handle_, 0);
+    model_input_h_ = inputs_[0].properties.validShape.dimensionSize[1];
+    model_input_w_ = inputs_[0].properties.validShape.dimensionSize[2];
+    // Refresh pool with correct size
+    m_matPool = MatPoolManager::getPool(cv::Size(model_input_w_, model_input_h_), CV_8UC3);
+    resized_rgb_ = m_matPool.getMat(cv::Size(model_input_w_, model_input_h_), CV_8UC3);
+    yuv420p_ = m_matPool.getMat(cv::Size(model_input_w_, model_input_h_ * 3 / 2), CV_8UC1);
+
     for (int i = 0; i < input_count; i++) {
-        hbDNNGetInputTensorProperties(&inputs_[i].properties, dnn_handle_, i);
+        if (i > 0) {
+            hbDNNGetInputTensorProperties(&inputs_[i].properties, dnn_handle_, i);
+        }
         auto &props = inputs_[i].properties;
 
-        // 核心修复：显式补全所有 stride 维度，不要漏掉任何一个
         if (i == 0) { // Y 分量
-            props.stride[0] = 50176; 
-            props.stride[1] = 224;
+            props.stride[0] = model_input_w_ * model_input_h_;
+            props.stride[1] = model_input_w_;
             props.stride[2] = 1;
             props.stride[3] = 1;
-            props.alignedByteSize = 50176;
+            props.alignedByteSize = model_input_w_ * model_input_h_;
         } else { // UV 分量
-            props.stride[0] = 25088;
-            props.stride[1] = 224;
+            props.stride[0] = model_input_w_ * model_input_h_ / 2;
+            props.stride[1] = model_input_w_;
             props.stride[2] = 2;
             props.stride[3] = 1;
-            props.alignedByteSize = 25088;
+            props.alignedByteSize = model_input_w_ * model_input_h_ / 2;
         }
         
-        // 确保分配的内存大小与 alignedByteSize 一致
         hbUCPMallocCached(&inputs_[i].sysMem, props.alignedByteSize, 0);
-        inputs_[i].sysMem.memSize = props.alignedByteSize; // 别忘了设置 memSize
+        inputs_[i].sysMem.memSize = props.alignedByteSize;
     }
 
-    // 输出部分同理
+    // 输出部分
     for (int i = 0; i < output_count; i++) {
         hbDNNGetOutputTensorProperties(&outputs_[i].properties, dnn_handle_, i);
         hbUCPMallocCached(&outputs_[i].sysMem, outputs_[i].properties.alignedByteSize, 0);
@@ -81,23 +85,26 @@ void Patchcore::setupTensors() {
 }
 
 void Patchcore::preprocess(const cv::Mat& bgr) {
-    // 1. 使用预分配的Mat进行颜色空间转换与缩放，避免重复创建
+    int half_h = model_input_h_ / 2;
+    int half_w = model_input_w_ / 2;
+
+    // 1. 使用预分配的Mat进行颜色空间转换与缩放
     cv::cvtColor(bgr, resized_rgb_, cv::COLOR_BGR2RGB);
-    cv::resize(resized_rgb_, resized_rgb_, cv::Size(224, 224));
+    cv::resize(resized_rgb_, resized_rgb_, cv::Size(model_input_w_, model_input_h_));
     cv::cvtColor(resized_rgb_, yuv420p_, cv::COLOR_RGB2YUV_I420);
 
     // 2. Y 分量拷贝
-    std::memcpy(inputs_[0].sysMem.virAddr, yuv420p_.data, 224 * 224);
+    std::memcpy(inputs_[0].sysMem.virAddr, yuv420p_.data, model_input_w_ * model_input_h_);
     
     // 3. UV 分量交错排列 (NV12 构造)
-    uint8_t* u_src = yuv420p_.data + (224 * 224);
-    uint8_t* v_src = u_src + (224 * 224 / 4);
+    uint8_t* u_src = yuv420p_.data + (model_input_w_ * model_input_h_);
+    uint8_t* v_src = u_src + (model_input_w_ * model_input_h_ / 4);
     uint8_t* uv_dest = reinterpret_cast<uint8_t*>(inputs_[1].sysMem.virAddr);
     
-    for (int i = 0; i < 112; ++i) {
-        for (int j = 0; j < 112; ++j) {
-            uv_dest[i * 224 + j * 2] = u_src[i * 112 + j];
-            uv_dest[i * 224 + j * 2 + 1] = v_src[i * 112 + j];
+    for (int i = 0; i < half_h; ++i) {
+        for (int j = 0; j < half_w; ++j) {
+            uv_dest[i * model_input_w_ + j * 2] = u_src[i * half_w + j];
+            uv_dest[i * model_input_w_ + j * 2 + 1] = v_src[i * half_w + j];
         }
     }
     
@@ -123,7 +130,9 @@ std::vector<Detection> Patchcore::run(cv::Mat& frame) {
     float global_score = *(float*)outputs_[1].sysMem.virAddr;
 
     // 缓存热力图
-    m_current_amap = cv::Mat(224, 224, CV_32FC1, amap_ptr).clone();
+    int amap_h = outputs_[0].properties.validShape.dimensionSize[1];
+    int amap_w = outputs_[0].properties.validShape.dimensionSize[2];
+    m_current_amap = cv::Mat(amap_h, amap_w, CV_32FC1, amap_ptr).clone();
 
     Detection d;
     d.score = global_score;

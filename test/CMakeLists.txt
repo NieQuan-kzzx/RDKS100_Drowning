@@ -25,6 +25,7 @@ foreach(test_src ${TEST_FILES})
         ${HOBOT_LINK_LIBS}
         ${OpenCV_LIBS}
         ${HIKSDK_LIBRARIES}
+        PkgConfig::FFMPEG
     )
 
     message(STATUS "Adding test target: ${test_name}")

@@ -66,7 +66,7 @@ private:
 private:
     // 原始流录制
     std::atomic<bool> m_isOriginalRecording{false};
-    ThreadSafeQueue<cv::Mat> m_originalQueue;
+    ThreadSafeQueue<cv::Mat> m_originalQueue{15};
     std::thread m_originalRecordThread;
     cv::VideoWriter m_originalVideoWriter;
     std::mutex m_originalWriterMutex;
@@ -74,7 +74,7 @@ private:
 
     // 推理流录制
     std::atomic<bool> m_isInferenceRecording{false};
-    ThreadSafeQueue<cv::Mat> m_inferenceQueue;
+    ThreadSafeQueue<cv::Mat> m_inferenceQueue{15};
     std::thread m_inferenceRecordThread;
     cv::VideoWriter m_inferenceVideoWriter;
     std::mutex m_inferenceWriterMutex;

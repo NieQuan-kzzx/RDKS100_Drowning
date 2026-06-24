@@ -67,7 +67,8 @@ test-basic: build
 	if [ -f test_Detection ]; then ./test_Detection && echo "✅ Detection测试通过"; fi; \
 	if [ -f test_bytetrack_detection ]; then ./test_bytetrack_detection && echo "✅ bytetrack_detection测试通过"; fi; \
 	if [ -f test_ImageSaver ]; then ./test_ImageSaver && echo "✅ ImageSaver测试通过"; fi; \
-	if [ -f test_rtsp ]; then sudo ./test_rtsp && echo "✅ RTSP测试通过"; fi
+	if [ -f test_rtsp ]; then sudo ./test_rtsp && echo "✅ RTSP测试通过"; fi; \
+	if [ -f test_RTSPRecord ]; then sudo ./test_RTSPRecord --record_seconds=10 --method=hw && echo "✅ RTSP录像测试通过"; fi
 
 # 高级测试（特定模型和功能）
 test-advanced: build
@@ -127,8 +128,8 @@ clean-all: clean test-clean data-clean
 	@echo "🧹 完全清理完成！所有构建文件、测试输出和运行时数据已清除。"
       
 # 特定功能测试目标
-.PHONY: test-bytetrack test-botsort test-detection test-bytetrack-detection test-detection-video test-rtsp test-h264
-.PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab test-seg-video
+.PHONY: test-bytetrack test-botsort test-detection test-bytetrack-detection test-detection-video test-rtsp test-h264 test-rtsp-record
+.PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab test-seg-video test-seg-inference
 .PHONY: test-drowning test-swimmer test-under-surface
 
 # ByteTrack 跟踪测试
@@ -165,6 +166,11 @@ test-imagesaver: build
 test-rtsp: build
 	@echo "📹 正在测试RTSP摄像头..."
 	@cd $(TEST_DIR) && sudo ./test_rtsp
+
+# RTSP摄像头录像测试
+test-rtsp-record: build
+	@echo "🎥 正在测试RTSP摄像头录像..."
+	@cd $(TEST_DIR) && sudo ./test_RTSPRecord
 
 # H264编解码测试
 test-h264: build
@@ -215,6 +221,11 @@ test-seg: build
 test-seg-video: build
 	@echo "🗺️ 正在测试语义分割..."
 	@cd $(TEST_DIR) && ./test_seg_video
+
+# 语义分割测试
+test-seg-inference: build
+	@echo "🗺️ 正在测试语义分割..."
+	@cd $(TEST_DIR) && ./test_seg_inference
 
 # SAHI小目标检测测试
 test-sahi: build
@@ -314,10 +325,12 @@ help:
 	@echo "  make test-bytetrack-detection - bytetrack目标检测测试"
 	@echo "  make test-detection-video - 目标检测视频测试"
 	@echo "  make test-rtsp         - RTSP摄像头测试"
+	@echo "  make test-rtsp-record  - RTSP摄像头录像测试"
 	@echo "  make test-pose         - 姿态估计测试"
 	@echo "  make test-drowning     - 溺水检测测试"
 	@echo "  make test-seg          - 语义分割测试"
 	@echo "  make test-seg-video    - 语义分割测试"
+	@echo "  make test-seg-inference - 语义分割推理测试"
 	@echo "  make test-deeplab      - DeepLabV3+测试"
 	@echo "  make test-sahi         - SAHI小目标检测测试"
 	@echo "  make test-hiksdk       - HIKSDK测试"

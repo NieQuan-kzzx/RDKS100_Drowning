@@ -3,6 +3,7 @@ SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/Yolo11Infer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/YoloPose.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Patchcore.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/YoloSeg.cpp
 )
 
 target_include_directories(lib_inference
