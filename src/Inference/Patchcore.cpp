@@ -10,14 +10,14 @@ const std::string Patchcore::PREPROCESS_RGB_KEY = "preprocess_rgb";
 const std::string Patchcore::PREPROCESS_YUV_KEY = "preprocess_yuv";
 
 Patchcore::Patchcore()
-    : m_matPool(MatPoolManager::getPool(cv::Size(224, 224), CV_8UC3)) {
+    : m_matPool(&MatPoolManager::getPool(cv::Size(224, 224), CV_8UC3)) {
     PlogInitializer::getInstance().init(plog::verbose);
 }
 
 Patchcore::~Patchcore() {
     cleanup();
-    if (!resized_rgb_.empty()) m_matPool.returnMat(resized_rgb_);
-    if (!yuv420p_.empty()) m_matPool.returnMat(yuv420p_);
+    if (!resized_rgb_.empty()) m_matPool->returnMat(resized_rgb_);
+    if (!yuv420p_.empty()) m_matPool->returnMat(yuv420p_);
 }
 
 bool Patchcore::init(const std::string& model_path) {
@@ -48,9 +48,9 @@ void Patchcore::setupTensors() {
     model_input_h_ = inputs_[0].properties.validShape.dimensionSize[1];
     model_input_w_ = inputs_[0].properties.validShape.dimensionSize[2];
     // Refresh pool with correct size
-    m_matPool = MatPoolManager::getPool(cv::Size(model_input_w_, model_input_h_), CV_8UC3);
-    resized_rgb_ = m_matPool.getMat(cv::Size(model_input_w_, model_input_h_), CV_8UC3);
-    yuv420p_ = m_matPool.getMat(cv::Size(model_input_w_, model_input_h_ * 3 / 2), CV_8UC1);
+    m_matPool = &MatPoolManager::getPool(cv::Size(model_input_w_, model_input_h_), CV_8UC3);
+    resized_rgb_ = m_matPool->getMat(cv::Size(model_input_w_, model_input_h_), CV_8UC3);
+    yuv420p_ = m_matPool->getMat(cv::Size(model_input_w_, model_input_h_ * 3 / 2), CV_8UC1);
 
     for (int i = 0; i < input_count; i++) {
         if (i > 0) {

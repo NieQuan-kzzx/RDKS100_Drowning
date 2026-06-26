@@ -33,7 +33,7 @@ private:
     cv::Mat m_current_amap; // 缓存热力图用于 draw 接口
 
     // 内存池优化
-    MatPool& m_matPool;
+    MatPool* m_matPool;
 
     // 预分配中间变量，避免 run 循环中重复申请内存
     cv::Mat resized_rgb_;
