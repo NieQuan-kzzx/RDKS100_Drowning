@@ -19,9 +19,9 @@ DEFINE_string(model_path, "/home/sunrise/Desktop/RDKS100_Drowning/models/MyMot_B
               "Path to BPU Quantized *.hbm model file");
 DEFINE_string(test_img, "/home/sunrise/Desktop/test_bmp/1.jpg",
               "Path to load the test image.");
-DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/test_mot2.mp4",
+DEFINE_string(input_video, "/home/sunrise/Desktop/RDKS100_Drowning/tem/test_mot4.mp4",
               "Path to input video file. If set, video mode will be used.");
-DEFINE_string(output_video, "test_mot5.mp4",
+DEFINE_string(output_video, "test_mot3.mp4",
               "Path to save processed output video.");
 DEFINE_string(label_file, "/home/sunrise/Desktop/RDKS100_Drowning/tem/classes_mot.names",
               "Path to load ImageNet label mapping file.");
