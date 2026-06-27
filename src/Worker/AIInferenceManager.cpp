@@ -4,6 +4,7 @@
 #include "YoloSeg.h"
 #include "DrowningUnderSurface.h"
 #include "DrowningState.h"
+#include "WaterIngress.h"
 #include <plog/Log.h>
 
 AIInferenceManager::AIInferenceManager(QObject* parent)
@@ -72,6 +73,18 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
         yolo->setLabels({"water"});
         nextEngine = std::move(yolo);
         // nextLogic = std::make_unique<DrowningUnderSurface>();
+    }
+    else if (type == "WATER_INGRESS") {
+        auto patchcore = std::make_unique<Inf::Patchcore>();
+        patchcore->setLabels({"anomaly"});
+        nextEngine = std::move(patchcore);
+
+        auto water_logic = std::make_unique<WaterIngress>();
+        water_logic->setSegLabels({"water"});
+        water_logic->setWaterClassId(0);
+        water_logic->setPatchcoreThreshold(50.0f);
+        // 实例分割模型路径需通过 water_logic->initSeg(path) 另行配置
+        nextLogic = std::move(water_logic);
     }
     else {
         PLOGE << "AIInferenceManager: Unknown model type: " << type;

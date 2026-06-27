@@ -34,7 +34,7 @@ void ImageSaver::flush(void)
         auto nowTimeT = std::chrono::system_clock::to_time_t(now);
         std::tm tm = *std::localtime(&nowTimeT);
 
-        // 格式化时间字符串为文件夹名（例如：2024-12-21_14-30-00）
+        // 格式化时间字符串为文件夹名（例如：2025-12-21_14-30-00）
         std::ostringstream folderNameStream;
         folderNameStream << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S");
         std::string timeFolder = folderPath + "/" + folderNameStream.str();

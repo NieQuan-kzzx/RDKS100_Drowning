@@ -257,6 +257,16 @@ test-finewaternet: build
 	@echo "💧 正在测试精细水体网络..."
 	@cd $(TEST_DIR) && ./test_finewaternet
 
+# 进水检测测试（图片）
+test-water-ingress: build
+	@echo "💧 正在测试进水检测（图片）..."
+	@cd $(TEST_DIR) && ./test_WaterIngress
+
+# 进水检测测试（视频）
+test-water-ingress-video: build
+	@echo "💧 正在测试进水检测（视频）..."
+	@cd $(TEST_DIR) && ./test_WaterIngress_video
+
 # PatchCore测试
 test-patchcore: build
 	@echo "🔧 正在测试PatchCore..."
@@ -343,6 +353,8 @@ help:
 	@echo "  make test-plog         - Plog日志测试"
 	@echo "  make test-roughwaternet - 粗糙水体网络测试"
 	@echo "  make test-finewaternet - 精细水体网络测试"
+	@echo "  make test-water-ingress     - 进水检测测试（图片）"
+	@echo "  make test-water-ingress-video - 进水检测测试（视频）"
 	@echo "  make test-patchcore    - PatchCore测试"
 	@echo "  make test-patchcore-hpp - PatchCore HPP测试"
 	@echo ""
