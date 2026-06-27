@@ -293,6 +293,11 @@
           </item>
           <item>
            <property name="text">
+            <string>行人检测</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
             <string>进水检测</string>
            </property>
           </item>
@@ -326,6 +331,11 @@
           <item>
            <property name="text">
             <string>溺水检测</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>行人检测</string>
            </property>
           </item>
           <item>
@@ -429,7 +439,7 @@
      <x>0</x>
      <y>0</y>
      <width>1850</width>
-     <height>23</height>
+     <height>26</height>
     </rect>
    </property>
   </widget>

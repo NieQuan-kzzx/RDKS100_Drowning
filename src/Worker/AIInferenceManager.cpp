@@ -37,18 +37,26 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
 
     if (type == "YOLO") {
         auto yolo = std::make_unique<Inf::Yolo11Infer>();
-        yolo->setLabels({    
-            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
-            "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
-            "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
-            "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
-            "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
-            "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
-            "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
-            "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
-            "scissors", "teddy bear", "hair drier", "toothbrush"});
+        yolo->setLabels({   
+            "person" 
+            // "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
+            // "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
+            // "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
+            // "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
+            // "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
+            // "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
+            // "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
+            // "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
+            // "scissors", "teddy bear", "hair drier", "toothbrush"
+        });
         nextEngine = std::move(yolo);
         nextLogic = std::make_unique<DrowningUnderSurface>();
+    }
+    else if (type == "DROWNING") {
+        auto yolo = std::make_unique<Inf::Yolo11Infer>();
+        yolo->setLabels({"person at surface", "person underwater"});
+        nextEngine = std::move(yolo);
+        nextLogic = std::make_unique<DrowningState>();
     }
     else if (type == "SWIMMER") {
         auto yolo = std::make_unique<Inf::Yolo11Infer>();
