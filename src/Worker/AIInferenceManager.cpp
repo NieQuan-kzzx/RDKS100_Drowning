@@ -29,7 +29,9 @@ AIInferenceManager::~AIInferenceManager() {
     PLOGI << "AIInferenceManager: Destroyed safely.";
 }
 
-bool AIInferenceManager::switchModel(const std::string& type, const std::string& path) {
+bool AIInferenceManager::switchModel(const std::string& type, const std::string& path,
+                                     const std::vector<std::string>& labels,
+                                     const std::map<std::string, std::string>& params) {
     PLOGI << "AIInferenceManager: Switching model to: " << type;
 
     // 1. Create new engine and logic (outside mutex, may block on BPU init)
@@ -38,30 +40,19 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
 
     if (type == "YOLO") {
         auto yolo = std::make_unique<Inf::Yolo11Infer>();
-        yolo->setLabels({   
-            "person" 
-            // "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
-            // "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
-            // "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
-            // "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
-            // "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
-            // "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
-            // "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
-            // "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
-            // "scissors", "teddy bear", "hair drier", "toothbrush"
-        });
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"person"} : labels);
         nextEngine = std::move(yolo);
         nextLogic = std::make_unique<DrowningUnderSurface>();
     }
     else if (type == "DROWNING") {
         auto yolo = std::make_unique<Inf::Yolo11Infer>();
-        yolo->setLabels({"person at surface", "person underwater"});
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"person at surface", "person underwater"} : labels);
         nextEngine = std::move(yolo);
         nextLogic = std::make_unique<DrowningState>();
     }
     else if (type == "SWIMMER") {
         auto yolo = std::make_unique<Inf::Yolo11Infer>();
-        yolo->setLabels({"drowning", "swimming"});
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"drowning", "swimming"} : labels);
         nextEngine = std::move(yolo);
         nextLogic = std::make_unique<DrowningState>();
     }
@@ -70,9 +61,8 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
     }
     else if (type == "YOLOSEG") {
         auto yolo = std::make_unique<Inf::YoloSeg>();
-        yolo->setLabels({"water"});
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"water"} : labels);
         nextEngine = std::move(yolo);
-        // nextLogic = std::make_unique<DrowningUnderSurface>();
     }
     else if (type == "WATER_INGRESS") {
         auto patchcore = std::make_unique<Inf::Patchcore>();
@@ -80,10 +70,23 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
         nextEngine = std::move(patchcore);
 
         auto water_logic = std::make_unique<WaterIngress>();
-        water_logic->setSegLabels({"water"});
-        water_logic->setWaterClassId(0);
-        water_logic->setPatchcoreThreshold(50.0f);
-        // 实例分割模型路径需通过 water_logic->initSeg(path) 另行配置
+        water_logic->setSegLabels(labels.empty() ? std::vector<std::string>{"water"} : labels);
+
+        auto it_id = params.find("water_class_id");
+        water_logic->setWaterClassId(it_id != params.end() ? std::stoi(it_id->second) : 0);
+
+        auto it_thr = params.find("patchcore_threshold");
+        water_logic->setPatchcoreThreshold(it_thr != params.end() ? std::stof(it_thr->second) : 50.0f);
+
+        auto it_seg = params.find("seg_model_path");
+        if (it_seg != params.end()) {
+            if (!water_logic->initSeg(it_seg->second)) {
+                PLOGE << "AIInferenceManager: Failed to init seg model for WATER_INGRESS";
+            }
+        } else {
+            PLOGW << "AIInferenceManager: No seg_model_path in params, water detection disabled";
+        }
+
         nextLogic = std::move(water_logic);
     }
     else {

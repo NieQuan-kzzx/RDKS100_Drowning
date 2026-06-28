@@ -1,0 +1,75 @@
+{
+    "config": {
+        "cameras": [
+            {
+                "name": "Camera 1",
+                "url": "rtsp://admin:nuaa2026@192.168.137.15",
+                "width": 1920,
+                "height": 1080,
+                "queue_max_length": 25,
+                "capture_interval_ms": 0,
+                "is_full_drop": false,
+                "decode_mode": "HARDWARE"
+            },
+            {
+                "name": "Camera 2",
+                "url": "rtsp://admin:nuaa2027@192.168.137.20",
+                "width": 1920,
+                "height": 1080,
+                "queue_max_length": 25,
+                "capture_interval_ms": 0,
+                "is_full_drop": false,
+                "decode_mode": "SOFTWARE"
+            }
+        ],
+        "models": [
+            {
+                "key": "行人检测",
+                "type": "YOLO",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm",
+                "labels": ["person"],
+                "params": []
+            },
+            {
+                "key": "溺水检测",
+                "type": "DROWNING",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/UnderSurface0613.hbm",
+                "labels": ["person at surface", "person underwater"],
+                "params": []
+            },
+            {
+                "key": "游泳检测",
+                "type": "SWIMMER",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm",
+                "labels": ["drowning", "swimming"],
+                "params": []
+            },
+            {
+                "key": "进水检测",
+                "type": "YOLOSEG",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm",
+                "labels": ["water"],
+                "params": []
+            },
+            {
+                "key": "进水检测(双模型)",
+                "type": "WATER_INGRESS",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm",
+                "labels": ["water"],
+                "params": [
+                    {"key": "water_class_id", "value": "0"},
+                    {"key": "patchcore_threshold", "value": "50.0"},
+                    {"key": "seg_model_path", "value": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm"}
+                ]
+            }
+        ],
+        "display": {
+            "resize_width": 640,
+            "resize_height": 360
+        },
+        "save_paths": {
+            "snapshot_dir": "./snapshots",
+            "record_dir": "./records"
+        }
+    }
+}

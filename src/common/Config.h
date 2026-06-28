@@ -1,7 +1,12 @@
 #pragma once
 #include <string>
+#include <vector>
+#include <map>
+#include <fstream>
 #include "cereal/archives/json.hpp"
 #include "cereal/cereal.hpp"
+#include "cereal/types/vector.hpp"
+#include "cereal/types/map.hpp"
 
 struct HikConfig {
     std::string ip;
@@ -18,61 +23,97 @@ struct HikConfig {
     }
 };
 
+struct CameraConfig {
+    std::string name;
+    std::string url;
+    int width = 1920;
+    int height = 1080;
+    int queue_max_length = 25;
+    int capture_interval_ms = 0;
+    bool is_full_drop = false;
+    std::string decode_mode = "HARDWARE";
 
-// struct DirConfig
-// {
-//     // 路径
-//     std::string video_warp_map_dir;
-//     std::string camera_warp_map_dir;
-//     std::string camera_intrinsic_dir;
-//     std::string YOLO_detect_dir;
+    template <class Archive>
+    void serialize(Archive & archive) {
+        archive(CEREAL_NVP(name),
+                CEREAL_NVP(url),
+                CEREAL_NVP(width),
+                CEREAL_NVP(height),
+                CEREAL_NVP(queue_max_length),
+                CEREAL_NVP(capture_interval_ms),
+                CEREAL_NVP(is_full_drop),
+                CEREAL_NVP(decode_mode));
+    }
+};
 
-//     template <class Archive>
-//     void serialize(Archive &archive)
-//     {
-//         archive(CEREAL_NVP(video_warp_map_dir),
-//                 CEREAL_NVP(camera_warp_map_dir),
-//                 CEREAL_NVP(camera_intrinsic_dir),
-//                 CEREAL_NVP(YOLO_detect_dir));
-//     }
-// };
+struct ModelEntry {
+    std::string key;
+    std::string type;
+    std::string path;
+    std::vector<std::string> labels;
+    std::map<std::string, std::string> params;
 
-// struct RuntimeConfig
-// {
-//     // 输入参数
-//     std::string source_type;
-//     int camera_num;
-//     bool is_undistort;
-//     bool is_sahi;
+    template <class Archive>
+    void serialize(Archive & archive) {
+        archive(CEREAL_NVP(key),
+                CEREAL_NVP(type),
+                CEREAL_NVP(path),
+                CEREAL_NVP(labels),
+                CEREAL_NVP(params));
+    }
+};
 
-//     // 推理参数
-//     float detect_conf_thresh; // 目标检测阈值
-//     float track_thresh;       // 2阶段处理时的阈值
-//     float high_thresh;        // 初始化一个新的轨迹时box的置信度需要大于该阈值
-//     float match_thresh;       // box和轨迹匹配的IOU阈值
+struct DisplayConfig {
+    int resize_width = 640;
+    int resize_height = 360;
 
-//     // 刷新参数(ms)
-//     int calibrate_refresh_interval;
-//     int track_refresh_interval;
-//     int previrew_refresh_interval;
+    template <class Archive>
+    void serialize(Archive & archive) {
+        archive(CEREAL_NVP(resize_width),
+                CEREAL_NVP(resize_height));
+    }
+};
 
-//     int video_capture_interval;
+struct SavePathsConfig {
+    std::string snapshot_dir = "./snapshots";
+    std::string record_dir = "./records";
 
-//     template <class Archive>
-//     void serialize(Archive &archive)
-//     {
-//         archive(
-//             CEREAL_NVP(source_type),
-//             CEREAL_NVP(camera_num),
-//             CEREAL_NVP(is_undistort),
-//             CEREAL_NVP(is_sahi),
-//             CEREAL_NVP(detect_conf_thresh),
-//             CEREAL_NVP(track_thresh),
-//             CEREAL_NVP(high_thresh),
-//             CEREAL_NVP(match_thresh),
-//             CEREAL_NVP(calibrate_refresh_interval),
-//             CEREAL_NVP(track_refresh_interval),
-//             CEREAL_NVP(previrew_refresh_interval),
-//             CEREAL_NVP(video_capture_interval));
-//     }
-// };
+    template <class Archive>
+    void serialize(Archive & archive) {
+        archive(CEREAL_NVP(snapshot_dir),
+                CEREAL_NVP(record_dir));
+    }
+};
+
+struct AppConfig {
+    std::vector<CameraConfig> cameras;
+    std::vector<ModelEntry> models;
+    DisplayConfig display;
+    SavePathsConfig save_paths;
+
+    template <class Archive>
+    void serialize(Archive & archive) {
+        archive(CEREAL_NVP(cameras),
+                CEREAL_NVP(models),
+                CEREAL_NVP(display),
+                CEREAL_NVP(save_paths));
+    }
+
+    static AppConfig loadFromFile(const std::string& path) {
+        AppConfig config;
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            return config;
+        }
+        try {
+            cereal::JSONInputArchive archive(file);
+            archive(cereal::make_nvp("config", config));
+        } catch (const std::exception& e) {
+            fprintf(stderr, "[Config] Failed to parse %s: %s\n", path.c_str(), e.what());
+        }
+        fprintf(stderr, "[Config] Loaded: %zu cameras, %zu models, display %dx%d\n",
+                config.cameras.size(), config.models.size(),
+                config.display.resize_width, config.display.resize_height);
+        return config;
+    }
+};

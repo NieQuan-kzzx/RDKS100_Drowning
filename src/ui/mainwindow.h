@@ -10,6 +10,7 @@
 #include "RTSPCamera.h"
 #include "ThreadPool.h"
 #include "DetectionCoordinator.h"
+#include "Config.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -56,4 +57,7 @@ private:
     // 工具函数
     QImage matToQImage(const cv::Mat& mat);
     void initSystems();
+
+    // 配置
+    AppConfig m_config;
 };

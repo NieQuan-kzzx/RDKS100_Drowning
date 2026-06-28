@@ -24,7 +24,9 @@ public:
     void setPaused(bool paused);
 
     // 模型管理
-    bool switchModel(const std::string& type, const std::string& path);
+    bool switchModel(const std::string& type, const std::string& path,
+                     const std::vector<std::string>& labels = {},
+                     const std::map<std::string, std::string>& params = {});
 
     // 录制控制
     bool startRecording(const std::string& basePath = "");

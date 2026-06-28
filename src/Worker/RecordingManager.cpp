@@ -206,6 +206,10 @@ void RecordingManager::originalRecordLoop() {
             }
 
             // 不再等待更多帧，直接用测到的FPS打开Writer
+            if (frameBuffer.empty()) {
+                m_isOriginalRecording.store(false);
+                continue;
+            }
             std::lock_guard<std::mutex> lock(m_originalWriterMutex);
             double fps = m_highPerformanceMode.load()
                 ? std::min(actualFps, 20.0)
@@ -278,6 +282,10 @@ void RecordingManager::inferenceRecordLoop() {
                                                frameBuffer, 10, 30, 3500);
             }
 
+            if (frameBuffer.empty()) {
+                m_isInferenceRecording.store(false);
+                continue;
+            }
             std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
             double fps = m_highPerformanceMode.load()
                 ? std::min(actualFps, 20.0)

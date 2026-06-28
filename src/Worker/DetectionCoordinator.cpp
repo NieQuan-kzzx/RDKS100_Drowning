@@ -1,6 +1,9 @@
 #include "DetectionCoordinator.h"
 #include "RTSPCamera.h"
 #include <plog/Log.h>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 // 条件编译：检查C++17 filesystem支持
 #if __has_include(<filesystem>) && __cplusplus >= 201703L
@@ -102,8 +105,10 @@ void DetectionCoordinator::setPaused(bool paused) {
     PLOGI << "DetectionCoordinator: System " << (paused ? "paused" : "resumed");
 }
 
-bool DetectionCoordinator::switchModel(const std::string& type, const std::string& path) {
-    bool success = m_inferenceManager->switchModel(type, path);
+bool DetectionCoordinator::switchModel(const std::string& type, const std::string& path,
+                                       const std::vector<std::string>& labels,
+                                       const std::map<std::string, std::string>& params) {
+    bool success = m_inferenceManager->switchModel(type, path, labels, params);
 
     if (success && m_isRunning.load()) {
         if (!m_inferenceManager->isRunning()) {
@@ -119,7 +124,32 @@ bool DetectionCoordinator::switchModel(const std::string& type, const std::strin
 
 bool DetectionCoordinator::startRecording(const std::string& basePath) {
     std::string path = basePath.empty() ? "drowning_detection" : basePath;
-    return m_recordingManager->startDualRecording(path);
+
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+    std::string timestamp = ss.str();
+
+    std::string originalPath = m_recordingManager->generateRecordingPath(
+        path, "_original_" + timestamp + ".avi");
+    bool originalOk = m_recordingManager->startOriginalRecording(originalPath);
+
+    std::string inferencePath;
+    bool inferenceOk = false;
+    if (m_inferenceManager->isRunning()) {
+        inferencePath = m_recordingManager->generateRecordingPath(
+            path, "_inference_" + timestamp + ".avi");
+        inferenceOk = m_recordingManager->startInferenceRecording(inferencePath);
+    }
+
+    if (originalOk || inferenceOk) {
+        m_recordingActive.store(true);
+        emit recordingStarted(QString::fromStdString(originalPath),
+                             QString::fromStdString(inferencePath));
+        return true;
+    }
+    return false;
 }
 
 void DetectionCoordinator::stopRecording() {

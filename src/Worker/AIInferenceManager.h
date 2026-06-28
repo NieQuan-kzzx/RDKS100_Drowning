@@ -5,6 +5,7 @@
 #include <thread>
 #include <memory>
 #include <mutex>
+#include <map>
 #include "BaseInfer.h"
 #include "ThreadSafeQueue.h"
 #include "LogicBase.h"
@@ -20,7 +21,9 @@ public:
     ~AIInferenceManager();
 
     // 模型管理
-    bool switchModel(const std::string& type, const std::string& path);
+    bool switchModel(const std::string& type, const std::string& path,
+                     const std::vector<std::string>& labels = {},
+                     const std::map<std::string, std::string>& params = {});
 
     // 推理控制
     void startInference();

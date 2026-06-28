@@ -58,6 +58,8 @@ signals:
 private:
     void originalRecordLoop();
     void inferenceRecordLoop();
+
+public:
     std::string generateRecordingPath(const std::string& basePath, const std::string& suffix);
 
     // 性能控制

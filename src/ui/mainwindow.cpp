@@ -7,6 +7,7 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , m_config(AppConfig::loadFromFile("/home/sunrise/Desktop/RDKS100_Drowning/config/config.json"))
 {
     ui->setupUi(this);
     qRegisterMetaType<cv::Mat>("cv::Mat");
@@ -55,8 +56,17 @@ MainWindow::~MainWindow()
 
 void MainWindow::initSystems()
 {
-    m_cam_1 = new RTSPCamera("rtsp://127.0.0.1/assets/zuoshiyan.h264", 1920, 1080, 25, 0, false, RTSPCamera::HARDWARE);
-    m_cam_2 = new RTSPCamera("rtsp://127.0.0.1/assets/swim2.h264", 1920, 1080, 25, 0, false, RTSPCamera::SOFTWARE);
+    auto makeCam = [&](const CameraConfig& c) -> RTSPCamera* {
+        RTSPCamera::DecodeMode mode = (c.decode_mode == "SOFTWARE")
+            ? RTSPCamera::SOFTWARE : RTSPCamera::HARDWARE;
+        return new RTSPCamera(c.url, c.width, c.height,
+                              c.queue_max_length, c.capture_interval_ms,
+                              c.is_full_drop, mode);
+    };
+    if (m_config.cameras.size() >= 1)
+        m_cam_1 = makeCam(m_config.cameras[0]);
+    if (m_config.cameras.size() >= 2)
+        m_cam_2 = makeCam(m_config.cameras[1]);
     m_pool = new ThreadPool(4);
     m_coordinator_1 = new DetectionCoordinator(m_cam_1, 1, this);
     m_coordinator_2 = new DetectionCoordinator(m_cam_2, 2, this);
@@ -111,45 +121,28 @@ void MainWindow::on_btnConfirm_clicked()
     QString selectedMode_1 = ui->comboBoxModels_1->currentText();
     QString selectedMode_2 = ui->comboBoxModels_2->currentText();
     
-    // 默认模型路径
-    std::string modelType_1 = "YOLO", modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
-    std::string modelType_2 = "YOLO", modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
+    // 从配置中查找对应模式的模型参数
+    auto findModel = [&](const QString& mode) -> ModelEntry {
+        std::string key = mode.toStdString();
+        for (const auto& m : m_config.models) {
+            if (m.key == key) return m;
+        }
+        // 回退：找"行人检测"或默认值
+        for (const auto& m : m_config.models) {
+            if (m.key == "行人检测") return m;
+        }
+        ModelEntry fb;
+        fb.type = "YOLO";
+        fb.path = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
+        fb.labels = {"person"};
+        return fb;
+    };
 
-    // 模型选择逻辑 (Cam 1)
-    if (selectedMode_1.contains("游泳检测")) {
-        modelType_1 = "SWIMMER";
-        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm";
-    } else if (selectedMode_1.contains("进水检测")) {
-        modelType_1 = "YOLOSEG";
-        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm";
-    } else if (selectedMode_1.contains("溺水检测")) {
-        modelType_1 = "DROWNING";
-        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/UnderSurface0613.hbm";
-    } else if (selectedMode_1.contains("行人检测")) {
-        modelType_1 = "YOLO";
-        modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
-    }
-    // } else if (selectedMode_1.contains("进水检测")) {
-    // modelType_1 = "Patchcore";
-    // modelPath_1 = "/home/sunrise/Desktop/RDKS100_Drowning/models/patchcore.hbm";
-    // 模型选择逻辑 (Cam 2)
-    if (selectedMode_2.contains("游泳检测")) {
-        modelType_2 = "SWIMMER";
-        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm";
-    } else if (selectedMode_2.contains("进水检测")) {
-        modelType_2 = "YOLOSEG";
-        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm";
-    } else if (selectedMode_2.contains("溺水检测")) {
-        modelType_2 = "DROWNING";
-        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/UnderSurface0613.hbm";
-    } else if (selectedMode_2.contains("行人检测")) {
-        modelType_2 = "YOLO";
-        modelPath_2 = "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm";
-    }
+    ModelEntry model_1 = findModel(selectedMode_1);
+    ModelEntry model_2 = findModel(selectedMode_2);
 
-    // 修正：改用 m_coordinator 切换模型
-    m_coordinator_1->switchModel(modelType_1, modelPath_1);
-    m_coordinator_2->switchModel(modelType_2, modelPath_2);
+    m_coordinator_1->switchModel(model_1.type, model_1.path, model_1.labels, model_1.params);
+    m_coordinator_2->switchModel(model_2.type, model_2.path, model_2.labels, model_2.params);
 
     // 模型切换已完成，如果系统正在运行，switchModel会自动处理推理启动
 
@@ -193,7 +186,7 @@ void MainWindow::updateUI(cv::Mat frame)
     if (frame.empty()) return;
 
     cv::Mat showFrame;
-    cv::resize(frame, showFrame, cv::Size(640, 360));
+    cv::resize(frame, showFrame, cv::Size(m_config.display.resize_width, m_config.display.resize_height));
 
     QImage img = matToQImage(showFrame);
     ui->labelOriginal_1->setPixmap(QPixmap::fromImage(img).scaled(
@@ -219,7 +212,7 @@ void MainWindow::on_btnOpen_clicked() {
     connect(m_coordinator_1, &DetectionCoordinator::frameReady, this, [this](cv::Mat frame){
         if (frame.empty()) return;
         cv::Mat showFrame;
-        cv::resize(frame, showFrame, cv::Size(640, 360));
+        cv::resize(frame, showFrame, cv::Size(m_config.display.resize_width, m_config.display.resize_height));
         QImage img = matToQImage(showFrame);
         ui->labelOriginal_1->setPixmap(QPixmap::fromImage(img).scaled(
             ui->labelOriginal_1->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -228,7 +221,7 @@ void MainWindow::on_btnOpen_clicked() {
     connect(m_coordinator_1, &DetectionCoordinator::inferenceFrameReady, this, [this](cv::Mat frame){
         if (frame.empty()) return;
         cv::Mat showFrame;
-        cv::resize(frame, showFrame, cv::Size(640, 360));
+        cv::resize(frame, showFrame, cv::Size(m_config.display.resize_width, m_config.display.resize_height));
         QImage img = matToQImage(showFrame);
         ui->labelProcessed_1->setPixmap(QPixmap::fromImage(img).scaled(
             ui->labelProcessed_1->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -238,7 +231,7 @@ void MainWindow::on_btnOpen_clicked() {
     connect(m_coordinator_2, &DetectionCoordinator::frameReady, this, [this](cv::Mat frame){
         if (frame.empty()) return;
         cv::Mat showFrame;
-        cv::resize(frame, showFrame, cv::Size(640, 360));
+        cv::resize(frame, showFrame, cv::Size(m_config.display.resize_width, m_config.display.resize_height));
         QImage img = matToQImage(showFrame);
         ui->labelOriginal_2->setPixmap(QPixmap::fromImage(img).scaled(
             ui->labelOriginal_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -247,7 +240,7 @@ void MainWindow::on_btnOpen_clicked() {
     connect(m_coordinator_2, &DetectionCoordinator::inferenceFrameReady, this, [this](cv::Mat frame){
         if (frame.empty()) return;
         cv::Mat showFrame;
-        cv::resize(frame, showFrame, cv::Size(640, 360));
+        cv::resize(frame, showFrame, cv::Size(m_config.display.resize_width, m_config.display.resize_height));
         QImage img = matToQImage(showFrame);
         ui->labelProcessed_2->setPixmap(QPixmap::fromImage(img).scaled(
             ui->labelProcessed_2->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -306,7 +299,7 @@ void MainWindow::on_btnPause_clicked() {
 }
 
 void MainWindow::handleSnapshot(cv::Mat raw, cv::Mat infer, int id) {
-    QString dirPath = "./snapshots/";
+    QString dirPath = QString::fromStdString(m_config.save_paths.snapshot_dir) + "/";
     QDir dir;
     if (!dir.exists(dirPath)) dir.mkpath(dirPath); 
 
