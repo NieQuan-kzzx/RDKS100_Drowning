@@ -3,7 +3,7 @@
         "cameras": [
             {
                 "name": "Camera 1",
-                "url": "rtsp://admin:nuaa2026@192.168.137.15",
+                "url": "rtsp://127.0.0.1/assets/zuoshiyan.h264",
                 "width": 1920,
                 "height": 1080,
                 "queue_max_length": 25,
@@ -13,7 +13,7 @@
             },
             {
                 "name": "Camera 2",
-                "url": "rtsp://admin:nuaa2027@192.168.137.20",
+                "url": "rtsp://127.0.0.1/assets/Final_Drowning.h264",
                 "width": 1920,
                 "height": 1080,
                 "queue_max_length": 25,
@@ -47,7 +47,7 @@
             {
                 "key": "进水检测",
                 "type": "YOLOSEG",
-                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water0629.hbm",
                 "labels": ["water"],
                 "params": []
             },
@@ -59,7 +59,7 @@
                 "params": [
                     {"key": "water_class_id", "value": "0"},
                     {"key": "patchcore_threshold", "value": "50.0"},
-                    {"key": "seg_model_path", "value": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water_zuoshiyan.hbm"}
+                    {"key": "seg_model_path", "value": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water0629.hbm"}
                 ]
             }
         ],
