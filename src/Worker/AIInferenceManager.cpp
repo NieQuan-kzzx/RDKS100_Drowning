@@ -34,6 +34,13 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
                                      const std::map<std::string, std::string>& params) {
     PLOGI << "AIInferenceManager: Switching model to: " << type;
 
+    // 0. Release old engine FIRST to free BPU resources before loading a new one
+    {
+        std::lock_guard<std::mutex> lock(m_engineMutex);
+        m_inferEngine.reset();
+        m_currentLogic.reset();
+    }
+
     // 1. Create new engine and logic (outside mutex, may block on BPU init)
     std::unique_ptr<Inf::BaseInfer> nextEngine;
     std::unique_ptr<LogicBase> nextLogic;
@@ -115,17 +122,19 @@ bool AIInferenceManager::switchModel(const std::string& type, const std::string&
 }
 
 void AIInferenceManager::startInference() {
-    std::lock_guard<std::mutex> lock(m_engineMutex); // 启动时也需要加锁检查引擎
+    std::lock_guard<std::mutex> lock(m_engineMutex);
     
     if (m_isRunning.load()) {
         PLOGW << "AIInferenceManager: Already running, ignoring start request";
         return;
     }
-    // 这里会出现一个INFO的错误误导日志，但实际上是正常的：因为如果没有加载模型，线程会立即退出，这时我们不应该认为是“失败”，而是正常的“无模型可运行”状态。
     if (!m_inferEngine) {
         PLOGE << "AIInferenceManager: Cannot start - No inference engine loaded!";
         return;
     }
+
+    // 清除残留的空帧，防止 stopInference 入队的退出信号被新线程误消费
+    m_inferenceQueue.clear();
 
     m_isRunning.store(true);
     m_inferenceThread = std::thread(&AIInferenceManager::inferenceLoop, this);
@@ -135,6 +144,7 @@ void AIInferenceManager::startInference() {
 void AIInferenceManager::stopInference() {
     // 1. 原子操作停止标志
     if (!m_isRunning.exchange(false)) {
+        PLOGW << "AIInferenceManager: stopInference called but wasn't running";
         return; 
     }
 
@@ -151,13 +161,14 @@ void AIInferenceManager::stopInference() {
         m_inferenceThread.join();
     }
 
-    // 4. 清理引擎缓存，释放 MatPool 引用
-    {
-        std::lock_guard<std::mutex> lock(m_engineMutex);
-        m_inferEngine.reset(); 
-        m_currentLogic.reset();
-    }
-    PLOGI << "AIInferenceManager: Stopped and resources cleared.";
+    // 4. 线程已退出，清除可能残留的空帧（线程若不在 dequeue 而在执行推理，
+    //    入队的空帧不会被消费，会残留到下一次 startInference）
+    m_inferenceQueue.clear();
+
+    // 5. 重置模型类型为 NONE，下次 DetectionCoordinator::start() 不会自动启动推理。
+    //    引擎保留不释放，后续 switchModel() 确认时会替换为新引擎。
+    m_currentModelType = "NONE";
+    PLOGI << "AIInferenceManager: Stopped, model type reset to NONE.";
 }
 
 void AIInferenceManager::setPaused(bool paused) {
@@ -214,13 +225,14 @@ void AIInferenceManager::inferenceLoop() {
 
             if (m_inferEngine) {
                 try {
-                    // AI 推理及业务处理
+                    // AI 推理
                     results = m_inferEngine->run(frame);
-                    m_inferEngine->draw(frame, results);
 
                     if (m_currentLogic && m_isRunning.load()) {
                         m_currentLogic->process(frame, results);
                     }
+
+                    m_inferEngine->draw(frame, results);
 
                     processResults(frame, results);
 

@@ -78,14 +78,15 @@ int main(int argc, char** argv) {
 
         cv::Mat display = frame.clone();
 
-        // Patchcore 推理
+        // 先完成所有推理（都在干净的 display 上）
         auto patchcore_results = patchcore.run(display);
-        float anomaly_score = patchcore_results.empty() ? 0.0f : patchcore_results[0].score;
-        patchcore.draw(display, patchcore_results);
-
-        // 实例分割推理
         auto seg_results = yolo_seg.run(display);
+
+        float anomaly_score = patchcore_results.empty() ? 0.0f : patchcore_results[0].score;
+
+        // 再画图（seg 先画 mask，patchcore 后画热力图 + 文字在顶层）
         yolo_seg.draw(display, seg_results);
+        patchcore.draw(display, patchcore_results);
 
         // 双重判定
         bool has_water = false;

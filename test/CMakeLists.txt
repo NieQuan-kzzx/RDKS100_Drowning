@@ -17,6 +17,7 @@ foreach(test_src ${TEST_FILES})
     target_link_libraries(${test_name}
         PRIVATE
         lib_algorithm
+        lib_logic
         lib_base  
         hobot_utils      
         lib_common

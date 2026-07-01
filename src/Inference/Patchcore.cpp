@@ -121,7 +121,6 @@ std::vector<Detection> Patchcore::run(cv::Mat& frame) {
     hbUCPSchedParam sched; HB_UCP_INITIALIZE_SCHED_PARAM(&sched);
     hbUCPSubmitTask(task, &sched);
     hbUCPWaitTaskDone(task, 0);
-    hbUCPReleaseTask(task);
 
     hbUCPMemFlush(&(outputs_[0].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
     hbUCPMemFlush(&(outputs_[1].sysMem), HB_SYS_MEM_CACHE_INVALIDATE);
@@ -129,10 +128,10 @@ std::vector<Detection> Patchcore::run(cv::Mat& frame) {
     float* amap_ptr = (float*)outputs_[0].sysMem.virAddr;
     float global_score = *(float*)outputs_[1].sysMem.virAddr;
 
-    // 缓存热力图
-    int amap_h = outputs_[0].properties.validShape.dimensionSize[1];
-    int amap_w = outputs_[0].properties.validShape.dimensionSize[2];
-    m_current_amap = cv::Mat(amap_h, amap_w, CV_32FC1, amap_ptr).clone();
+    // 缓存热力图（Patchcore 输出 heatmap 与输入同尺寸，和 test_patchcore.cc 一致）
+    m_current_amap = cv::Mat(model_input_h_, model_input_w_, CV_32FC1, amap_ptr).clone();
+
+    hbUCPReleaseTask(task);
 
     Detection d;
     d.score = global_score;

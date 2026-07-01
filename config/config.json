@@ -3,20 +3,20 @@
         "cameras": [
             {
                 "name": "Camera 1",
-                "url": "rtsp://127.0.0.1/assets/zuoshiyan.h264",
+                "url": "rtsp://127.0.0.1/assets/Final_Drowning.h264",
                 "width": 1920,
                 "height": 1080,
-                "queue_max_length": 25,
+                "queue_max_length": 20,
                 "capture_interval_ms": 0,
                 "is_full_drop": false,
                 "decode_mode": "HARDWARE"
             },
             {
                 "name": "Camera 2",
-                "url": "rtsp://127.0.0.1/assets/Final_Drowning.h264",
+                "url": "rtsp://127.0.0.1/assets/Final_Water.h264",
                 "width": 1920,
                 "height": 1080,
-                "queue_max_length": 25,
+                "queue_max_length": 20,
                 "capture_interval_ms": 0,
                 "is_full_drop": false,
                 "decode_mode": "SOFTWARE"

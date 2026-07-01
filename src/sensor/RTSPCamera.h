@@ -76,4 +76,5 @@ private:
     DecodeMode m_decode_mode;
     // 软解专用
     cv::VideoCapture m_soft_cap;
+    int m_read_fail_count = 0;
 };

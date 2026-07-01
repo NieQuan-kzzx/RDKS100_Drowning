@@ -41,7 +41,11 @@ void ImageSensor::stop()
         return;
 
     this->is_running.store(false);
-    
+    cv.notify_all();
+
+    // Clear any remaining data to prevent stale frames
+    clear();
+
     // 这里的 join 逻辑要小心，确保线程确实是由这里管理的
     if (this->sensor_thread.joinable()) {
         this->sensor_thread.join();
@@ -129,10 +133,9 @@ cv::Mat ImageSensor::getDataNoBlock()
 cv::Mat ImageSensor::getData()
 {
     std::unique_lock<std::mutex> lock(mutex);
-    if (this->images.empty())
-    {
-        PLOGV << "Blocking wait for new video frame...";
-        cv.wait(lock);
+    cv.wait(lock, [this]() { return !images.empty() || !is_running.load(); });
+    if (images.empty()) {
+        return cv::Mat();
     }
     cv::Mat frame = this->images.front();
     this->images.pop_front();

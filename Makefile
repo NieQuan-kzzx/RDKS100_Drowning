@@ -130,7 +130,7 @@ clean-all: clean test-clean data-clean
 # 特定功能测试目标
 .PHONY: test-bytetrack test-botsort test-detection test-bytetrack-detection test-detection-video test-rtsp test-h264 test-rtsp-record
 .PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab test-seg-video test-seg-inference
-.PHONY: test-drowning test-swimmer test-under-surface
+.PHONY: test-drowning test-swimmer test-under-surface test-water-ingress-module
 
 # ByteTrack 跟踪测试
 test-bytetrack: build
@@ -267,6 +267,11 @@ test-water-ingress-video: build
 	@echo "💧 正在测试进水检测（视频）..."
 	@cd $(TEST_DIR) && ./test_WaterIngress_video
 
+# 进水检测模块测试（单元测试）
+test-water-ingress-module: build
+	@echo "🧪 正在测试进水检测模块..."
+	@cd $(TEST_DIR) && ./test_WaterIngress_module
+
 # PatchCore测试
 test-patchcore: build
 	@echo "🔧 正在测试PatchCore..."
@@ -355,6 +360,7 @@ help:
 	@echo "  make test-finewaternet - 精细水体网络测试"
 	@echo "  make test-water-ingress     - 进水检测测试（图片）"
 	@echo "  make test-water-ingress-video - 进水检测测试（视频）"
+	@echo "  make test-water-ingress-module - 进水检测模块单元测试"
 	@echo "  make test-patchcore    - PatchCore测试"
 	@echo "  make test-patchcore-hpp - PatchCore HPP测试"
 	@echo ""

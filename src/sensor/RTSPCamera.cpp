@@ -52,9 +52,13 @@ void RTSPCamera::start() {
 }
 
 void RTSPCamera::stop() {
+    std::lock_guard<std::mutex> lock(m_start_mutex);
+
     if (!this->is_running.load()) return;
 
     this->is_running.store(false);
+    this->clear();
+    cv.notify_all();
     PLOGI << "RTSPCamera: Stop signal sent.";
 
     if (sensor_thread.joinable()) {
@@ -108,7 +112,22 @@ void RTSPCamera::hardwareDecodeLoop() {
                 std::this_thread::sleep_for(std::chrono::milliseconds(capture_interval_ms));
             }
         } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            PLOGE << "RTSPCamera: Failed to get image from hardware decoder, reopening stream...";
+            if (m_decoder) {
+                sp_stop_decode(m_decoder);
+                sp_release_decoder_module(m_decoder);
+                m_decoder = nullptr;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            m_decoder = sp_init_decoder_module();
+            ret = sp_start_decode(m_decoder, const_cast<char*>(m_rtsp_url.c_str()),
+                                 0, SP_ENCODER_H264, m_width, m_height);
+            if (ret != 0) {
+                PLOGE << "RTSPCamera: Failed to restart hardware decoder, ret: " << ret;
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            } else {
+                PLOGI << "RTSPCamera: Hardware decoder restarted successfully";
+            }
         }
     }
 
@@ -145,9 +164,25 @@ void RTSPCamera::softwareDecodeLoop() {
         }
 
         if (!m_soft_cap.read(frame)) {
-            PLOGE << "RTSPCamera: Failed to read frame from software decoder";
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            m_read_fail_count++;
+            if (m_read_fail_count < 3) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
+            m_read_fail_count = 0;
+            PLOGE << "RTSPCamera: Failed to read frame from software decoder, reopening stream...";
+            m_soft_cap.release();
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            if (!m_soft_cap.open(m_rtsp_url, cv::CAP_FFMPEG)) {
+                PLOGE << "RTSPCamera: Failed to reopen RTSP stream";
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            } else {
+                m_soft_cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
+                PLOGI << "RTSPCamera: Stream reopened successfully";
+            }
             continue;
+        } else {
+            m_read_fail_count = 0;
         }
 
         if (frame.empty()) {

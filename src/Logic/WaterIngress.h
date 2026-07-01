@@ -22,5 +22,6 @@ private:
     std::unique_ptr<Inf::YoloSeg> m_yolo_seg;
     float m_patchcore_threshold = 50.0f;
     int m_water_class_id = 0;
+    bool m_patchcore_initialized = false;
     bool m_seg_initialized = false;
 };

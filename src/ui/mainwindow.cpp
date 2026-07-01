@@ -299,7 +299,7 @@ void MainWindow::on_btnPause_clicked() {
 }
 
 void MainWindow::handleSnapshot(cv::Mat raw, cv::Mat infer, int id) {
-    QString dirPath = QString::fromStdString(m_config.save_paths.snapshot_dir) + "/";
+    QString dirPath = "/media/UBUNTU 18_0/records/";
     QDir dir;
     if (!dir.exists(dirPath)) dir.mkpath(dirPath); 
 
