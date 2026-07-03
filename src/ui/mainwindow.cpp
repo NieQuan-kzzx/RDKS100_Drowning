@@ -71,6 +71,9 @@ void MainWindow::initSystems()
     m_coordinator_1 = new DetectionCoordinator(m_cam_1, 1, this);
     m_coordinator_2 = new DetectionCoordinator(m_cam_2, 2, this);
 
+    m_coordinator_1->getInferenceManager()->setInferenceQueueMaxSize(m_config.inference_queue_max_size);
+    m_coordinator_2->getInferenceManager()->setInferenceQueueMaxSize(m_config.inference_queue_max_size);
+
     updateButtonStates();
 }
 

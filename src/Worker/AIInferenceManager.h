@@ -20,6 +20,8 @@ public:
     explicit AIInferenceManager(QObject* parent = nullptr);
     ~AIInferenceManager();
 
+    void setInferenceQueueMaxSize(int size) { m_inferenceQueueMaxSize = size; }
+
     // 模型管理
     bool switchModel(const std::string& type, const std::string& path,
                      const std::vector<std::string>& labels = {},
@@ -67,4 +69,6 @@ private:
     // 当前模型信息
     std::string m_currentModelType;
     std::string m_currentModelPath;
+
+    int m_inferenceQueueMaxSize = 2;
 };

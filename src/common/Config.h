@@ -90,13 +90,15 @@ struct AppConfig {
     std::vector<ModelEntry> models;
     DisplayConfig display;
     SavePathsConfig save_paths;
+    int inference_queue_max_size = 2;
 
     template <class Archive>
     void serialize(Archive & archive) {
         archive(CEREAL_NVP(cameras),
                 CEREAL_NVP(models),
                 CEREAL_NVP(display),
-                CEREAL_NVP(save_paths));
+                CEREAL_NVP(save_paths),
+                CEREAL_NVP(inference_queue_max_size));
     }
 
     static AppConfig loadFromFile(const std::string& path) {

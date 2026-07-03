@@ -185,7 +185,7 @@ void AIInferenceManager::submitFrame(const cv::Mat& frame) {
     }
     
     // 限制队列长度。如果推理太慢，直接丢弃老帧，确保实时性
-    if (m_inferenceQueue.size() > 2) {
+    if (m_inferenceQueue.size() > m_inferenceQueueMaxSize) {
         m_inferenceQueue.clear();
     }
     m_inferenceQueue.enqueue(frame);
