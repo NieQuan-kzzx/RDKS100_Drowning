@@ -26,6 +26,40 @@ MainWindow::MainWindow(QWidget *parent)
     // 截图回调
     connect(m_coordinator_1, &DetectionCoordinator::snapshotReady, this, &MainWindow::handleSnapshot);
     connect(m_coordinator_2, &DetectionCoordinator::snapshotReady, this, &MainWindow::handleSnapshot);
+
+    // 模型切换状态回调
+    connect(m_coordinator_1, &DetectionCoordinator::modelSwitching, this, [this](){
+        ui->statusbar->showMessage("正在加载模型...", 10000);
+    });
+    connect(m_coordinator_2, &DetectionCoordinator::modelSwitching, this, [this](){
+        ui->statusbar->showMessage("正在加载模型...", 10000);
+    });
+    connect(m_coordinator_1, &DetectionCoordinator::modelSwitched, this, [this](const QString& modelType){
+        ui->btnConfirm->setEnabled(true);
+        ui->statusbar->showMessage("模型 " + modelType + " 加载完成", 3000);
+        // 如果正在录制，启动推理流录制
+        if (ui->radioStartRecord->isChecked()) {
+            QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+            m_coordinator_1->startRecording("Cam1_Infer_" + timeStr.toStdString());
+            m_coordinator_2->startRecording("Cam2_Infer_" + timeStr.toStdString());
+            auto recordingManager1 = m_coordinator_1->getRecordingManager();
+            auto recordingManager2 = m_coordinator_2->getRecordingManager();
+            if (recordingManager1) recordingManager1->setRecordingPerformanceMode(true);
+            if (recordingManager2) recordingManager2->setRecordingPerformanceMode(true);
+        }
+    });
+    connect(m_coordinator_2, &DetectionCoordinator::modelSwitched, this, [this](const QString& modelType){
+        ui->btnConfirm->setEnabled(true);
+        ui->statusbar->showMessage("模型 " + modelType + " 加载完成", 3000);
+    });
+    connect(m_coordinator_1, &DetectionCoordinator::systemError, this, [this](const QString& error){
+        ui->btnConfirm->setEnabled(true);
+        ui->statusbar->showMessage("模型加载失败: " + error, 5000);
+    });
+    connect(m_coordinator_2, &DetectionCoordinator::systemError, this, [this](const QString& error){
+        ui->btnConfirm->setEnabled(true);
+        ui->statusbar->showMessage("模型加载失败: " + error, 5000);
+    });
 }
 
 MainWindow::~MainWindow()
@@ -86,7 +120,6 @@ void MainWindow::handleRecording(bool start)
     if (start) {
         QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
         
-        // 修正：直接使用已声明的 timeStr，不再加 QString 类型前缀
         m_coordinator_1->startRecording("Cam1_" + timeStr.toStdString());
         m_coordinator_2->startRecording("Cam2_" + timeStr.toStdString());
 
@@ -144,24 +177,13 @@ void MainWindow::on_btnConfirm_clicked()
     ModelEntry model_1 = findModel(selectedMode_1);
     ModelEntry model_2 = findModel(selectedMode_2);
 
-    m_coordinator_1->switchModel(model_1.type, model_1.path, model_1.labels, model_1.params);
-    m_coordinator_2->switchModel(model_2.type, model_2.path, model_2.labels, model_2.params);
+    // 使用异步版本，不阻塞主线程
+    m_coordinator_1->switchModelAsync(model_1.type, model_1.path, model_1.labels, model_1.params);
+    m_coordinator_2->switchModelAsync(model_2.type, model_2.path, model_2.labels, model_2.params);
 
-    // 模型切换已完成，如果系统正在运行，switchModel会自动处理推理启动
-
-    // 联动录制补齐
-    if (ui->radioStartRecord->isChecked()) {
-        QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
-        // 假设 Coordinator 提供了对应接口，或直接通过 Coordinator 传达
-        m_coordinator_1->startRecording("Cam1_Infer_" + timeStr.toStdString());
-        m_coordinator_2->startRecording("Cam2_Infer_" + timeStr.toStdString());
-
-        auto recordingManager1 = m_coordinator_1->getRecordingManager();
-        auto recordingManager2 = m_coordinator_2->getRecordingManager();
-        if (recordingManager1) recordingManager1->setRecordingPerformanceMode(true); // 开启高性能模式
-        if (recordingManager2) recordingManager2->setRecordingPerformanceMode(true); // 开启高性能模式
-        ui->statusbar->showMessage("录制已开始(高性能模式)", 3000);
-    }
+    // 禁用按钮，防止重复点击
+    ui->btnConfirm->setEnabled(false);
+    ui->statusbar->showMessage("正在加载模型，请稍候...", 10000);
 }
 
 void MainWindow::updateButtonStates()
@@ -302,7 +324,7 @@ void MainWindow::on_btnPause_clicked() {
 }
 
 void MainWindow::handleSnapshot(cv::Mat raw, cv::Mat infer, int id) {
-    QString dirPath = "/media/UBUNTU 18_0/records/";
+    QString dirPath = "/media/UBUNTU 18_01/records/";
     QDir dir;
     if (!dir.exists(dirPath)) dir.mkpath(dirPath); 
 

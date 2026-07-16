@@ -17,12 +17,17 @@ AIInferenceManager::~AIInferenceManager() {
     // 1. 先断开所有连接，防止线程在退出过程中通过 emit 触发主线程已销毁的对象
     this->disconnect(); 
     
-    // 2. 停止逻辑
+    // 2. 等待模型切换线程结束
+    if (m_switchThread.joinable()) {
+        m_switchThread.join();
+    }
+
+    // 3. 停止逻辑
     m_isRunning.store(false);
     m_inferenceQueue.clear();
     m_inferenceQueue.enqueue(cv::Mat()); // 唤醒
     
-    // 3. 等待线程结束
+    // 4. 等待线程结束
     if (m_inferenceThread.joinable()) {
         m_inferenceThread.join();
     }
@@ -32,6 +37,7 @@ AIInferenceManager::~AIInferenceManager() {
 bool AIInferenceManager::switchModel(const std::string& type, const std::string& path,
                                      const std::vector<std::string>& labels,
                                      const std::map<std::string, std::string>& params) {
+    // 此函数保留为同步版本，供需要同步操作的场景使用
     PLOGI << "AIInferenceManager: Switching model to: " << type;
 
     // 0. Release old engine FIRST to free BPU resources before loading a new one
@@ -269,4 +275,128 @@ void AIInferenceManager::processResults(cv::Mat& frame, const std::vector<Inf::D
 
     // 当前主要依赖具体的业务逻辑类处理
     // 可以在这里添加额外的后处理逻辑
+}
+
+void AIInferenceManager::switchModelAsync(const std::string& type, const std::string& path,
+                                          const std::vector<std::string>& labels,
+                                          const std::map<std::string, std::string>& params) {
+    // 如果正在切换，忽略新的切换请求
+    if (m_isSwitching.load()) {
+        PLOGW << "AIInferenceManager: Model switching already in progress, ignoring request";
+        return;
+    }
+
+    // 如果有旧的切换线程，等待其完成
+    if (m_switchThread.joinable()) {
+        m_switchThread.join();
+    }
+
+    m_isSwitching.store(true);
+    emit modelSwitching();
+
+    PLOGI << "AIInferenceManager: Starting async model switch to: " << type;
+
+    // 在新线程中执行模型切换
+    m_switchThread = std::thread(&AIInferenceManager::doSwitchModel, this,
+                                 type, path, labels, params);
+}
+
+void AIInferenceManager::doSwitchModel(const std::string& type, const std::string& path,
+                                       const std::vector<std::string>& labels,
+                                       const std::map<std::string, std::string>& params) {
+    PLOGI << "AIInferenceManager: doSwitchModel - Switching to: " << type;
+
+    // 0. Release old engine FIRST to free BPU resources before loading a new one
+    {
+        std::lock_guard<std::mutex> lock(m_engineMutex);
+        m_inferEngine.reset();
+        m_currentLogic.reset();
+    }
+
+    // 1. Create new engine and logic (outside mutex, may block on BPU init)
+    std::unique_ptr<Inf::BaseInfer> nextEngine;
+    std::unique_ptr<LogicBase> nextLogic;
+
+    if (type == "YOLO") {
+        auto yolo = std::make_unique<Inf::Yolo11Infer>();
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"person"} : labels);
+        nextEngine = std::move(yolo);
+        nextLogic = std::make_unique<DrowningUnderSurface>();
+    }
+    else if (type == "DROWNING") {
+        auto yolo = std::make_unique<Inf::Yolo11Infer>();
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"person at surface", "person underwater"} : labels);
+        nextEngine = std::move(yolo);
+        nextLogic = std::make_unique<DrowningState>();
+    }
+    else if (type == "SWIMMER") {
+        auto yolo = std::make_unique<Inf::Yolo11Infer>();
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"drowning", "swimming"} : labels);
+        nextEngine = std::move(yolo);
+        nextLogic = std::make_unique<DrowningState>();
+    }
+    else if (type == "Patchcore") {
+        nextEngine = std::make_unique<Inf::Patchcore>();
+    }
+    else if (type == "YOLOSEG") {
+        auto yolo = std::make_unique<Inf::YoloSeg>();
+        yolo->setLabels(labels.empty() ? std::vector<std::string>{"water"} : labels);
+        nextEngine = std::move(yolo);
+    }
+    else if (type == "WATER_INGRESS") {
+        auto patchcore = std::make_unique<Inf::Patchcore>();
+        patchcore->setLabels({"anomaly"});
+        nextEngine = std::move(patchcore);
+
+        auto water_logic = std::make_unique<WaterIngress>();
+        water_logic->setSegLabels(labels.empty() ? std::vector<std::string>{"water"} : labels);
+
+        auto it_id = params.find("water_class_id");
+        water_logic->setWaterClassId(it_id != params.end() ? std::stoi(it_id->second) : 0);
+
+        auto it_thr = params.find("patchcore_threshold");
+        water_logic->setPatchcoreThreshold(it_thr != params.end() ? std::stof(it_thr->second) : 50.0f);
+
+        auto it_seg = params.find("seg_model_path");
+        if (it_seg != params.end()) {
+            if (!water_logic->initSeg(it_seg->second)) {
+                PLOGE << "AIInferenceManager: Failed to init seg model for WATER_INGRESS";
+            }
+        } else {
+            PLOGW << "AIInferenceManager: No seg_model_path in params, water detection disabled";
+        }
+
+        nextLogic = std::move(water_logic);
+    }
+    else {
+        PLOGE << "AIInferenceManager: Unknown model type: " << type;
+        m_isSwitching.store(false);
+        emit inferenceError("Unknown model type: " + QString::fromStdString(type));
+        return;
+    }
+
+    if (!nextEngine || !nextEngine->init(path)) {
+        PLOGE << "AIInferenceManager: Failed to init model for " << type;
+        m_isSwitching.store(false);
+        emit inferenceError("Failed to switch model: " + QString::fromStdString(type));
+        return;
+    }
+
+    // 2. Atomically swap engines under mutex — inference loop picks it up next frame
+    {
+        std::lock_guard<std::mutex> lock(m_engineMutex);
+        m_inferEngine = std::move(nextEngine);
+        m_currentLogic = std::move(nextLogic);
+        m_currentModelType = type;
+        m_currentModelPath = path;
+    }
+
+    // 3. 如果推理未运行，自动启动推理线程
+    if (!m_isRunning.load()) {
+        startInference();
+    }
+
+    m_isSwitching.store(false);
+    PLOGI << "AIInferenceManager: Async model switch completed successfully to " << type;
+    emit modelSwitched(QString::fromStdString(type));
 }

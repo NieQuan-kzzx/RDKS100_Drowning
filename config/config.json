@@ -3,23 +3,23 @@
         "cameras": [
             {
                 "name": "Camera 1",
-                "url": "rtsp://127.0.0.1/assets/Final_Drowning.h264",
+                "url": "rtsp://127.0.0.1/assets/zuoshiyan.h264",
                 "width": 1920,
                 "height": 1080,
-                "queue_max_length": 20,
+                "queue_max_length": 30,
                 "capture_interval_ms": 0,
                 "is_full_drop": false,
                 "decode_mode": "HARDWARE"
             },
             {
                 "name": "Camera 2",
-                "url": "rtsp://127.0.0.1/assets/Final_Water.h264",
+                "url": "rtsp://127.0.0.1/assets/1080P_test.h264",
                 "width": 1920,
                 "height": 1080,
-                "queue_max_length": 20,
+                "queue_max_length": 30,
                 "capture_interval_ms": 0,
                 "is_full_drop": false,
-                "decode_mode": "SOFTWARE"
+                "decode_mode": "HARDWARE"
             }
         ],
         "models": [
@@ -41,13 +41,13 @@
                 "key": "游泳检测",
                 "type": "SWIMMER",
                 "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/drowning_TwoSelect.hbm",
-                "labels": ["drowning", "swimming"],
+                "labels": ["swimming", "drowning"],
                 "params": []
             },
             {
                 "key": "进水检测",
                 "type": "YOLOSEG",
-                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/Water0629.hbm",
+                "path": "/home/sunrise/Desktop/RDKS100_Drowning/models/waterSeg0716.hbm",
                 "labels": ["water"],
                 "params": []
             },

@@ -2,6 +2,8 @@
 
 #include <QObject>
 #include <memory>
+#include <thread>
+#include <atomic>
 #include "VideoCaptureManager.h"
 #include "AIInferenceManager.h"
 #include "RecordingManager.h"
@@ -9,7 +11,7 @@
 /**
  * @brief 检测协调器 - 协调各个专门的组件，提供统一的接口
  *
- * 这个类替代了原来庞大的 DetectionWorker，现在只负责组件协调
+ * 这个类只负责组件协调
  */
 class DetectionCoordinator : public QObject {
     Q_OBJECT
@@ -23,10 +25,15 @@ public:
     void stop();
     void setPaused(bool paused);
 
-    // 模型管理
+    // 模型管理（同步版本，供特殊场景使用）
     bool switchModel(const std::string& type, const std::string& path,
                      const std::vector<std::string>& labels = {},
                      const std::map<std::string, std::string>& params = {});
+
+    // 模型管理（异步执行，不阻塞调用线程）
+    void switchModelAsync(const std::string& type, const std::string& path,
+                          const std::vector<std::string>& labels = {},
+                          const std::map<std::string, std::string>& params = {});
 
     // 录制控制
     bool startRecording(const std::string& basePath = "");
@@ -59,6 +66,7 @@ signals:
     void recordingStopped();
     void systemError(const QString& error);
     void modelSwitched(const QString& modelType);
+    void modelSwitching();  // 模型切换开始信号
 
 private slots:
     void onFrameReady(const cv::Mat& frame);

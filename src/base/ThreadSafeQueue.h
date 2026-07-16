@@ -5,6 +5,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <chrono>
 
 template <typename T>
 class ThreadSafeQueue
@@ -49,6 +50,21 @@ public:
 
         cv.wait(lock, [this]()
                 { return !q.empty(); });
+
+        T item = q.front();
+        q.pop();
+        return item;
+    }
+
+    // 带超时的出队操作，超时返回默认构造的T
+    T dequeue_timeout(int timeout_ms)
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+
+        if (!cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this]()
+                { return !q.empty(); })) {
+            return T(); // 超时返回默认构造对象
+        }
 
         T item = q.front();
         q.pop();

@@ -108,6 +108,7 @@ void DetectionCoordinator::setPaused(bool paused) {
 bool DetectionCoordinator::switchModel(const std::string& type, const std::string& path,
                                        const std::vector<std::string>& labels,
                                        const std::map<std::string, std::string>& params) {
+    // 此函数保留为同步版本，供需要同步操作的场景使用
     bool success = m_inferenceManager->switchModel(type, path, labels, params);
 
     if (success && m_isRunning.load()) {
@@ -120,6 +121,13 @@ bool DetectionCoordinator::switchModel(const std::string& type, const std::strin
     }
 
     return success;
+}
+
+void DetectionCoordinator::switchModelAsync(const std::string& type, const std::string& path,
+                                           const std::vector<std::string>& labels,
+                                           const std::map<std::string, std::string>& params) {
+    // 使用异步版本，不阻塞调用线程
+    m_inferenceManager->switchModelAsync(type, path, labels, params);
 }
 
 bool DetectionCoordinator::startRecording(const std::string& basePath) {
@@ -199,6 +207,8 @@ void DetectionCoordinator::setupConnections() {
             this, &DetectionCoordinator::onInferenceError);
     connect(m_inferenceManager.get(), &AIInferenceManager::modelSwitched,
             this, &DetectionCoordinator::modelSwitched);
+    connect(m_inferenceManager.get(), &AIInferenceManager::modelSwitching,
+            this, &DetectionCoordinator::modelSwitching);
 
     // 连接录制信号
     connect(m_recordingManager.get(), &RecordingManager::recordingStarted,
@@ -248,6 +258,18 @@ void DetectionCoordinator::onFrameReady(const cv::Mat& frame) {
     emit frameReady(frame);
     if (m_recordingActive.load()) {
         m_recordingManager->submitOriginalFrame(frame);
+        
+        // 如果推理已启动但推理流录制未启动，自动启动推理流录制
+        if (m_inferenceManager->isRunning() && !m_recordingManager->isInferenceRecording()) {
+            PLOGI << "DetectionCoordinator: Inference started while recording active, starting inference recording";
+            auto now = std::chrono::system_clock::now();
+            auto time_t = std::chrono::system_clock::to_time_t(now);
+            std::stringstream ss;
+            ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+            std::string inferencePath = m_recordingManager->generateRecordingPath(
+                "drowning_detection_infer_" + ss.str(), ".avi");
+            m_recordingManager->startInferenceRecording(inferencePath);
+        }
     }
     if (m_inferenceManager->isRunning()) {
         m_inferenceManager->submitFrame(frame);

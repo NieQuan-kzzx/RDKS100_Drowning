@@ -22,10 +22,15 @@ public:
 
     void setInferenceQueueMaxSize(int size) { m_inferenceQueueMaxSize = size; }
 
-    // 模型管理
+    // 模型管理（同步版本，供特殊场景使用）
     bool switchModel(const std::string& type, const std::string& path,
                      const std::vector<std::string>& labels = {},
                      const std::map<std::string, std::string>& params = {});
+
+    // 模型管理（异步执行，不阻塞调用线程）
+    void switchModelAsync(const std::string& type, const std::string& path,
+                          const std::vector<std::string>& labels = {},
+                          const std::map<std::string, std::string>& params = {});
 
     // 推理控制
     void startInference();
@@ -45,11 +50,15 @@ signals:
     void inferenceFrameReady(cv::Mat frame);      // 推理结果帧信号
     void snapshotReady(cv::Mat raw, cv::Mat infer); // 推理截图信号
     void inferenceError(const QString& error);    // 推理错误信号
-    void modelSwitched(const QString& modelType); // 模型切换信号
+    void modelSwitched(const QString& modelType); // 模型切换完成信号
+    void modelSwitching();                        // 模型切换开始信号（用于UI提示）
 
 private:
     void inferenceLoop();  // 推理循环
     void processResults(cv::Mat& frame, const std::vector<Inf::Detection>& results);
+    void doSwitchModel(const std::string& type, const std::string& path,
+                       const std::vector<std::string>& labels,
+                       const std::map<std::string, std::string>& params);
 
 private:
     // 推理引擎和业务逻辑
@@ -69,6 +78,10 @@ private:
     // 当前模型信息
     std::string m_currentModelType;
     std::string m_currentModelPath;
+
+    // 异步模型切换线程
+    std::thread m_switchThread;
+    std::atomic<bool> m_isSwitching{false};
 
     int m_inferenceQueueMaxSize = 2;
 };

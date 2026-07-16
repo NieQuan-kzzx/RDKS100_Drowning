@@ -29,19 +29,16 @@ RecordingManager::~RecordingManager() {
 }
 
 bool RecordingManager::startOriginalRecording(const std::string& path) {
-    std::lock_guard<std::mutex> lock(m_originalWriterMutex);
-
+    // 如果正在录制，先停止旧的录制
     if (m_isOriginalRecording.load()) {
-        PLOGW << "RecordingManager: Original recording already in progress";
-        return false;
+        stopOriginalRecording();
     }
+
+    // 不要在这里 join，让旧线程在 dequeue_timeout 超时后自行退出
+    // 新线程会覆盖旧的 thread 对象
 
     m_originalRecordPath = path;
     m_isOriginalRecording.store(true);
-
-    if (m_originalRecordThread.joinable()) {
-        m_originalRecordThread.detach();
-    }
     m_originalRecordThread = std::thread(&RecordingManager::originalRecordLoop, this);
 
     PLOGI << "RecordingManager: Original recording started: " << path;
@@ -50,24 +47,21 @@ bool RecordingManager::startOriginalRecording(const std::string& path) {
 
 void RecordingManager::stopOriginalRecording() {
     m_isOriginalRecording.store(false);
+    // 先入队空帧唤醒可能阻塞在 dequeue 的线程，再清空队列
+    m_originalQueue.enqueue(cv::Mat());
     m_originalQueue.clear();
-    m_originalQueue.enqueue(cv::Mat()); // 停止信号
 }
 
 bool RecordingManager::startInferenceRecording(const std::string& path) {
-    std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
-
+    // 如果正在录制，先停止旧的录制
     if (m_isInferenceRecording.load()) {
-        PLOGW << "RecordingManager: Inference recording already in progress";
-        return false;
+        stopInferenceRecording();
     }
+
+    // 不要在这里 join，让旧线程自行退出
 
     m_inferenceRecordPath = path;
     m_isInferenceRecording.store(true);
-
-    if (m_inferenceRecordThread.joinable()) {
-        m_inferenceRecordThread.detach();
-    }
     m_inferenceRecordThread = std::thread(&RecordingManager::inferenceRecordLoop, this);
 
     PLOGI << "RecordingManager: Inference recording started: " << path;
@@ -76,8 +70,9 @@ bool RecordingManager::startInferenceRecording(const std::string& path) {
 
 void RecordingManager::stopInferenceRecording() {
     m_isInferenceRecording.store(false);
+    // 先入队空帧唤醒可能阻塞在 dequeue 的线程，再清空队列
+    m_inferenceQueue.enqueue(cv::Mat());
     m_inferenceQueue.clear();
-    m_inferenceQueue.enqueue(cv::Mat()); // 停止信号
 }
 
 bool RecordingManager::startDualRecording(const std::string& basePath) {
@@ -157,9 +152,13 @@ static double measure_actual_fps(
 
     int skipped = 0;
     while ((int)buffer.size() < min_samples) {
-        if (!is_recording.load() && queue.empty()) break;
-        cv::Mat f = queue.dequeue();
-        if (f.empty()) continue;
+        if (!is_recording.load()) break;
+        // 使用带超时的dequeue，每500ms检查一次是否需要停止
+        cv::Mat f = queue.dequeue_timeout(500);
+        if (f.empty()) {
+            // 超时或收到停止信号，重新检查is_recording
+            continue;
+        }
         auto now = std::chrono::steady_clock::now();
         if (skipped < skip_count) {
             ++skipped;
@@ -210,42 +209,51 @@ void RecordingManager::originalRecordLoop() {
                 m_isOriginalRecording.store(false);
                 continue;
             }
-            std::lock_guard<std::mutex> lock(m_originalWriterMutex);
-            double fps = m_highPerformanceMode.load()
-                ? std::min(actualFps, 20.0)
-                : actualFps;
-            m_originalVideoWriter.open(m_originalRecordPath,
-                                     cv::VideoWriter::fourcc('M','J','P','G'),
-                                     fps, frameBuffer.front().size());
+            {
+                std::lock_guard<std::mutex> lock(m_originalWriterMutex);
+                double fps = m_highPerformanceMode.load()
+                    ? std::min(actualFps, 20.0)
+                    : actualFps;
+                m_originalVideoWriter.open(m_originalRecordPath,
+                                         cv::VideoWriter::fourcc('M','J','P','G'),
+                                         fps, frameBuffer.front().size());
 
-            if (!m_originalVideoWriter.isOpened()) {
-                PLOGE << "RecordingManager: Failed to open original video writer";
-                emit recordingError("Failed to start original recording");
-                m_isOriginalRecording.store(false);
-                continue;
-            }
-            PLOGI << "RecordingManager: Original VideoWriter opened: "
-                  << frameBuffer.front().cols << "x" << frameBuffer.front().rows
-                  << " @ " << fps << " FPS (actual)";
-
-            // 写入缓存的帧
-            for (auto& f : frameBuffer) {
-                m_originalVideoWriter.write(f);
-                {
-                    std::lock_guard<std::mutex> lock(m_infoMutex);
-                    m_recordingInfo.originalFrameCount++;
+                if (!m_originalVideoWriter.isOpened()) {
+                    PLOGE << "RecordingManager: Failed to open original video writer";
+                    emit recordingError("Failed to start original recording");
+                    m_isOriginalRecording.store(false);
+                    continue;
                 }
-                f.release();
+                PLOGI << "RecordingManager: Original VideoWriter opened: "
+                      << frameBuffer.front().cols << "x" << frameBuffer.front().rows
+                      << " @ " << fps << " FPS (actual)";
+
+                // 写入缓存的帧
+                for (auto& f : frameBuffer) {
+                    m_originalVideoWriter.write(f);
+                    {
+                        std::lock_guard<std::mutex> infoLock(m_infoMutex);
+                        m_recordingInfo.originalFrameCount++;
+                    }
+                    f.release();
+                }
             }
             frameBuffer.clear();
             continue;
         }
 
         // ---- 正常写入循环 ----
-        cv::Mat frame = m_originalQueue.dequeue();
-        if (frame.empty()) continue;
+        // 使用带超时的dequeue，每500ms检查一次是否需要停止
+        cv::Mat frame = m_originalQueue.dequeue_timeout(500);
+        if (frame.empty()) {
+            // 超时或收到停止信号，重新检查循环条件
+            continue;
+        }
 
-        m_originalVideoWriter.write(frame);
+        {
+            std::lock_guard<std::mutex> lock(m_originalWriterMutex);
+            m_originalVideoWriter.write(frame);
+        }
 
         {
             std::lock_guard<std::mutex> lock(m_infoMutex);
@@ -286,42 +294,51 @@ void RecordingManager::inferenceRecordLoop() {
                 m_isInferenceRecording.store(false);
                 continue;
             }
-            std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
-            double fps = m_highPerformanceMode.load()
-                ? std::min(actualFps, 20.0)
-                : actualFps;
-            m_inferenceVideoWriter.open(m_inferenceRecordPath,
-                                      cv::VideoWriter::fourcc('M','J','P','G'),
-                                      fps, frameBuffer.front().size());
+            {
+                std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
+                double fps = m_highPerformanceMode.load()
+                    ? std::min(actualFps, 20.0)
+                    : actualFps;
+                m_inferenceVideoWriter.open(m_inferenceRecordPath,
+                                          cv::VideoWriter::fourcc('M','J','P','G'),
+                                          fps, frameBuffer.front().size());
 
-            if (!m_inferenceVideoWriter.isOpened()) {
-                PLOGE << "RecordingManager: Failed to open inference video writer";
-                emit recordingError("Failed to start inference recording");
-                m_isInferenceRecording.store(false);
-                continue;
-            }
-            PLOGI << "RecordingManager: Inference VideoWriter opened: "
-                  << frameBuffer.front().cols << "x" << frameBuffer.front().rows
-                  << " @ " << fps << " FPS (actual)";
-
-            // 写入缓存的帧
-            for (auto& f : frameBuffer) {
-                m_inferenceVideoWriter.write(f);
-                {
-                    std::lock_guard<std::mutex> lock(m_infoMutex);
-                    m_recordingInfo.inferenceFrameCount++;
+                if (!m_inferenceVideoWriter.isOpened()) {
+                    PLOGE << "RecordingManager: Failed to open inference video writer";
+                    emit recordingError("Failed to start inference recording");
+                    m_isInferenceRecording.store(false);
+                    continue;
                 }
-                f.release();
+                PLOGI << "RecordingManager: Inference VideoWriter opened: "
+                      << frameBuffer.front().cols << "x" << frameBuffer.front().rows
+                      << " @ " << fps << " FPS (actual)";
+
+                // 写入缓存的帧
+                for (auto& f : frameBuffer) {
+                    m_inferenceVideoWriter.write(f);
+                    {
+                        std::lock_guard<std::mutex> infoLock(m_infoMutex);
+                        m_recordingInfo.inferenceFrameCount++;
+                    }
+                    f.release();
+                }
             }
             frameBuffer.clear();
             continue;
         }
 
         // ---- 正常写入循环 ----
-        cv::Mat frame = m_inferenceQueue.dequeue();
-        if (frame.empty()) continue;
+        // 使用带超时的dequeue，每500ms检查一次是否需要停止
+        cv::Mat frame = m_inferenceQueue.dequeue_timeout(500);
+        if (frame.empty()) {
+            // 超时或收到停止信号，重新检查循环条件
+            continue;
+        }
 
-        m_inferenceVideoWriter.write(frame);
+        {
+            std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
+            m_inferenceVideoWriter.write(frame);
+        }
 
         {
             std::lock_guard<std::mutex> lock(m_infoMutex);
@@ -375,7 +392,7 @@ void RecordingManager::inferenceRecordLoop() {
 std::string RecordingManager::generateRecordingPath(const std::string& basePath, const std::string& suffix) {
     // === 修改部分：将录像目录指向 U 盘 ===
     // 注意：路径包含空格，必须作为完整字符串赋值
-    std::string recordsDir = "/media/UBUNTU 18_0/records"; 
+    std::string recordsDir = "/media/UBUNTU 18_01/records"; 
     // ======================================
 
 #if __has_include(<filesystem>) && __cplusplus >= 201703L
