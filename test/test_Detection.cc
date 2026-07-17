@@ -1,10 +1,10 @@
 // Attention: This program runs on RDK S100 board.
 // D-Robotics S100 *.hbm 模型路径
 // Path of D-Robotics S100 *.hbm model.
-#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/models/Zuoshiyan.hbm"
+#define MODEL_PATH "/home/sunrise/Desktop/RDKS100_Drowning/models/ultralytics_YOLO.hbm"
 // 推理使用的测试图片路径
 // Path of the test image used for inference.
-#define TEST_IMG_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/test_mot.png"
+#define TEST_IMG_PATH "/home/sunrise/Desktop/RDKS100_Drowning/tem/bus.jpg"
 // 前处理方式选择, 0:Resize, 1:LetterBox
 // Preprocessing method selection, 0: Resize, 1: LetterBox
 #define RESIZE_TYPE 0 
@@ -12,16 +12,16 @@
 #define PREPROCESS_TYPE LETTERBOX_TYPE
 // 推理结果保存路径
 // Path where the inference result will be saved
-#define IMG_SAVE_PATH "bytetrack_result.jpg"
+#define IMG_SAVE_PATH "result.jpg"
 // 模型的类别数量, 默认80
 // Number of classes in the model, default is 80
-#define CLASSES_NUM 1
+#define CLASSES_NUM 80
 // NMS的阈值, 默认0.7
 // Non-Maximum Suppression (NMS) threshold, default is 0.7
 #define NMS_THRESHOLD 0.7
 // 分数阈值, 默认0.25
 // Score threshold, default is 0.25
-#define SCORE_THRESHOLD 0.15
+#define SCORE_THRESHOLD 0.25
 // 控制回归部分离散化程度的超参数, 默认16
 // A hyperparameter that controls the discretization level of the regression part, default is 16
 #define REG 16
@@ -61,18 +61,18 @@
     } while (0);
 // COCO Names
 std::vector<std::string> object_names = {
-    "pedestrian"
+    // "pedestrian"
     //, "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor",
     // "person at surface", "person underwater"
-    // "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
-    // "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
-    // "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
-    // "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
-    // "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
-    // "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
-    // "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
-    // "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
-    // "scissors", "teddy bear", "hair drier", "toothbrush"
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", 
+    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", 
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", 
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", 
+    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", 
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", 
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", 
+    "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", 
+    "scissors", "teddy bear", "hair drier", "toothbrush"
 };
 // S100定制颜色
 std::vector<cv::Scalar> rdk_colors = {
@@ -513,11 +513,11 @@ int main()
             int label_y = (y1 - 10 > textSize.height) ? (y1 - 10) : (y1 + textSize.height + 10);
             cv::Point label_pos(x1, label_y);
             
-            // // 绘制标签背景
-            // cv::rectangle(img, label_pos + cv::Point(0, baseline), 
-            //              label_pos + cv::Point(textSize.width, -textSize.height), color, cv::FILLED);
-            // // 绘制黑色文字
-            // cv::putText(img, label, label_pos, cv::FONT_HERSHEY_SIMPLEX, FONT_SIZE, cv::Scalar(0, 0, 0), FONT_THICKNESS); 
+            // 绘制标签背景
+            cv::rectangle(img, label_pos + cv::Point(0, baseline), 
+                         label_pos + cv::Point(textSize.width, -textSize.height), color, cv::FILLED);
+            // 绘制黑色文字
+            cv::putText(img, label, label_pos, cv::FONT_HERSHEY_SIMPLEX, FONT_SIZE, cv::Scalar(0, 0, 0), FONT_THICKNESS); 
         }
     }
     std::cout << "\033[31m Draw Result time = " << std::fixed << std::setprecision(2) 

@@ -69,8 +69,7 @@ MainWindow::~MainWindow()
     if (m_coordinator_1) m_coordinator_1->disconnect(this);
     if (m_coordinator_2) m_coordinator_2->disconnect(this);
 
-     // 确保录制停止，防止后台线程访问已销毁的对象
-    // 步骤二：停止协调器
+    // 步骤二：停止协调器（先停协调器，再停摄像头）
     if (m_coordinator_1) {
         m_coordinator_1->setPaused(false);
         m_coordinator_1->stop();
@@ -80,11 +79,14 @@ MainWindow::~MainWindow()
         m_coordinator_2->stop();
     }
 
-    // 步骤三：停止摄像头
-    if (m_cam_1) m_cam_1->stop();
-    if (m_cam_2) m_cam_2->stop();
+    // 步骤三：停止并释放摄像头
+    if (m_cam_1) { m_cam_1->stop(); delete m_cam_1; m_cam_1 = nullptr; }
+    if (m_cam_2) { m_cam_2->stop(); delete m_cam_2; m_cam_2 = nullptr; }
 
-    // 步骤四：清理UI
+    // 步骤四：释放线程池（必须 join 所有工作线程，否则进程无法退出）
+    if (m_pool) { delete m_pool; m_pool = nullptr; }
+
+    // 步骤五：清理UI
     delete ui;
 }
 

@@ -6,6 +6,7 @@ file(GLOB_RECURSE ALGO_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_pose/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_seg/src/*.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/SAHI/src/*.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/yolo26/src/*.cc"
 )
 
 # 2. 生成算法动态库
@@ -22,6 +23,7 @@ PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_pose/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/yolo_seg/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/SAHI/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/yolo26/include"
     ${Eigen3_INCLUDE_DIRS}
     ${HOBOT_INCLUDE_DIRS}
 )

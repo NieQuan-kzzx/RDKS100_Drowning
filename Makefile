@@ -128,7 +128,7 @@ clean-all: clean test-clean data-clean
 	@echo "🧹 完全清理完成！所有构建文件、测试输出和运行时数据已清除。"
       
 # 特定功能测试目标
-.PHONY: test-bytetrack test-botsort test-detection test-bytetrack-detection test-detection-video test-rtsp test-h264 test-rtsp-record
+.PHONY: test-bytetrack test-botsort test-detection test-detection-yolo26 test-bytetrack-detection test-detection-video test-rtsp test-h264 test-rtsp-record 
 .PHONY: test-hikcamera test-pose test-seg test-sahi test-deeplab test-seg-video test-seg-inference
 .PHONY: test-drowning test-swimmer test-under-surface test-water-ingress-module
 
@@ -146,6 +146,11 @@ test-botsort: build
 test-detection: build
 	@echo "🔍 正在测试目标检测..."
 	@cd $(TEST_DIR) && ./test_Detection
+
+# 目标检测测试
+test-detection-yolo26: build
+	@echo "🔍 正在测试Yolo26目标检测..."
+	@cd $(TEST_DIR) && ./test_yolo26
 
 # 目标检测测试
 test-bytetrack-detection: build
@@ -337,6 +342,7 @@ help:
 	@echo "  make test-bytetrack     - ByteTrack跟踪测试"
 	@echo "  make test-botsort     - BotSort跟踪测试"
 	@echo "  make test-detection     - 目标检测测试"
+	@echo "  make test-detection-yolo26    - Yolo26目标检测测试"
 	@echo "  make test-bytetrack-detection - bytetrack目标检测测试"
 	@echo "  make test-detection-video - 目标检测视频测试"
 	@echo "  make test-rtsp         - RTSP摄像头测试"
