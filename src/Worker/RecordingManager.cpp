@@ -18,6 +18,13 @@ RecordingManager::RecordingManager(QObject* parent)
     : QObject(parent) {
 }
 
+void RecordingManager::setRecordingConfig(const RecordingConfig& config) {
+    m_recordingConfig = config;
+    PLOGI << "RecordingManager: Config updated - FPS: " << config.fps 
+          << ", Codec: " << config.codec 
+          << ", Queue size: " << config.queue_size;
+}
+
 RecordingManager::~RecordingManager() {
     stopAllRecording();
     if (m_originalRecordThread.joinable()) {
@@ -29,13 +36,18 @@ RecordingManager::~RecordingManager() {
 }
 
 bool RecordingManager::startOriginalRecording(const std::string& path) {
-    // 如果正在录制，先停止旧的录制
+    // 如果正在录制，先停止旧线程
     if (m_isOriginalRecording.load()) {
         stopOriginalRecording();
     }
 
-    // 不要在这里 join，让旧线程在 dequeue_timeout 超时后自行退出
-    // 新线程会覆盖旧的 thread 对象
+    // 异步等待旧线程退出，避免阻塞调用线程（如UI线程）
+    if (m_originalRecordThread.joinable()) {
+        auto oldThread = std::move(m_originalRecordThread);
+        std::thread([thread = std::move(oldThread)]() mutable {
+            thread.join();
+        }).detach();
+    }
 
     m_originalRecordPath = path;
     m_isOriginalRecording.store(true);
@@ -47,18 +59,25 @@ bool RecordingManager::startOriginalRecording(const std::string& path) {
 
 void RecordingManager::stopOriginalRecording() {
     m_isOriginalRecording.store(false);
-    // 先入队空帧唤醒可能阻塞在 dequeue 的线程，再清空队列
+    // 入队空帧（毒丸）唤醒阻塞在 dequeue_timeout 的线程
+    // 不 join()，不阻塞调用线程；线程会在消费毒丸后自行退出
+    // join() 由 startOriginalRecording() 和析构函数负责
     m_originalQueue.enqueue(cv::Mat());
-    m_originalQueue.clear();
 }
 
 bool RecordingManager::startInferenceRecording(const std::string& path) {
-    // 如果正在录制，先停止旧的录制
+    // 如果正在录制，先停止旧线程
     if (m_isInferenceRecording.load()) {
         stopInferenceRecording();
     }
 
-    // 不要在这里 join，让旧线程自行退出
+    // 异步等待旧线程退出，避免阻塞调用线程（如UI线程）
+    if (m_inferenceRecordThread.joinable()) {
+        auto oldThread = std::move(m_inferenceRecordThread);
+        std::thread([thread = std::move(oldThread)]() mutable {
+            thread.join();
+        }).detach();
+    }
 
     m_inferenceRecordPath = path;
     m_isInferenceRecording.store(true);
@@ -70,9 +89,8 @@ bool RecordingManager::startInferenceRecording(const std::string& path) {
 
 void RecordingManager::stopInferenceRecording() {
     m_isInferenceRecording.store(false);
-    // 先入队空帧唤醒可能阻塞在 dequeue 的线程，再清空队列
+    // 入队毒丸唤醒线程，不 join()，不阻塞调用线程
     m_inferenceQueue.enqueue(cv::Mat());
-    m_inferenceQueue.clear();
 }
 
 bool RecordingManager::startDualRecording(const std::string& basePath) {
@@ -138,85 +156,40 @@ RecordingManager::RecordingInfo RecordingManager::getRecordingInfo() const {
     return m_recordingInfo;
 }
 
-// 采集前N帧测出真实帧率，再用实际帧率初始化VideoWriter
-static double measure_actual_fps(
-    ThreadSafeQueue<cv::Mat>& queue,
-    const std::atomic<bool>& is_recording,
-    std::vector<cv::Mat>& buffer,
-    int skip_count,
-    int min_samples,
-    int max_wait_ms)
-{
-    auto start = std::chrono::steady_clock::now();
-    auto last = start;
 
-    int skipped = 0;
-    while ((int)buffer.size() < min_samples) {
-        if (!is_recording.load()) break;
-        // 使用带超时的dequeue，每500ms检查一次是否需要停止
-        cv::Mat f = queue.dequeue_timeout(500);
-        if (f.empty()) {
-            // 超时或收到停止信号，重新检查is_recording
-            continue;
-        }
-        auto now = std::chrono::steady_clock::now();
-        if (skipped < skip_count) {
-            ++skipped;
-            continue;
-        }
-        if (buffer.empty()) {
-            start = now;
-            last = now;
-        }
-        buffer.push_back(f);
-        last = now;
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count() >= max_wait_ms)
-            break;
-    }
-
-    if (buffer.size() < 2) return 15.0;
-
-    double elapsed_s = std::chrono::duration_cast<std::chrono::duration<double>>(
-        std::chrono::steady_clock::now() - start).count();
-    double fps = (buffer.size() - 1) / elapsed_s;
-
-    if (fps < 5.0)  fps = 5.0;
-    if (fps > 30.0) fps = 30.0;
-
-    PLOGI << "RecordingManager: Measured actual FPS = " << fps
-          << " (samples=" << buffer.size() << ", elapsed=" << elapsed_s << "s)";
-    return fps;
-}
 
 void RecordingManager::originalRecordLoop() {
     PLOGI << "RecordingManager: Original record thread started";
 
-    std::vector<cv::Mat> frameBuffer;
-    double actualFps = 15.0;
-
     while (m_isOriginalRecording.load() || !m_originalQueue.empty()) {
 
-        // ---- 初始化阶段：先采集帧测FPS，再打开VideoWriter ----
+        // ---- 初始化阶段：等待第一帧后打开VideoWriter ----
         if (!m_originalVideoWriter.isOpened()) {
-            if (frameBuffer.empty()) {
-                PLOGI << "RecordingManager: Measuring actual frame rate for original recording...";
-                actualFps = measure_actual_fps(m_originalQueue, m_isOriginalRecording,
-                                               frameBuffer, 10, 30, 3500);
-            }
-
-            // 不再等待更多帧，直接用测到的FPS打开Writer
-            if (frameBuffer.empty()) {
-                m_isOriginalRecording.store(false);
+            cv::Mat firstFrame = m_originalQueue.dequeue_timeout(500);
+            if (firstFrame.empty()) {
+                if (!m_isOriginalRecording.load()) break;
                 continue;
             }
+
             {
                 std::lock_guard<std::mutex> lock(m_originalWriterMutex);
-                double fps = m_highPerformanceMode.load()
-                    ? std::min(actualFps, 20.0)
-                    : actualFps;
+                // 根据配置的编码格式创建fourcc
+                int fourcc;
+                if (m_recordingConfig.codec == "XVID") {
+                    fourcc = cv::VideoWriter::fourcc('X','V','I','D');
+                } else if (m_recordingConfig.codec == "H264") {
+                    fourcc = cv::VideoWriter::fourcc('H','2','6','4');
+                } else if (m_recordingConfig.codec == "MP4V") {
+                    fourcc = cv::VideoWriter::fourcc('M','P','4','V');
+                } else if (m_recordingConfig.codec == "IYUV") {
+                    fourcc = cv::VideoWriter::fourcc('I','Y','U','V');
+                } else {
+                    fourcc = cv::VideoWriter::fourcc('M','J','P','G');
+                }
+                
                 m_originalVideoWriter.open(m_originalRecordPath,
-                                         cv::VideoWriter::fourcc('M','J','P','G'),
-                                         fps, frameBuffer.front().size());
+                                         fourcc,
+                                         m_recordingConfig.fps, firstFrame.size());
 
                 if (!m_originalVideoWriter.isOpened()) {
                     PLOGE << "RecordingManager: Failed to open original video writer";
@@ -225,28 +198,22 @@ void RecordingManager::originalRecordLoop() {
                     continue;
                 }
                 PLOGI << "RecordingManager: Original VideoWriter opened: "
-                      << frameBuffer.front().cols << "x" << frameBuffer.front().rows
-                      << " @ " << fps << " FPS (actual)";
+                      << firstFrame.cols << "x" << firstFrame.rows
+                      << " @ " << m_recordingConfig.fps << " FPS";
 
-                // 写入缓存的帧
-                for (auto& f : frameBuffer) {
-                    m_originalVideoWriter.write(f);
-                    {
-                        std::lock_guard<std::mutex> infoLock(m_infoMutex);
-                        m_recordingInfo.originalFrameCount++;
-                    }
-                    f.release();
+                m_originalVideoWriter.write(firstFrame);
+                {
+                    std::lock_guard<std::mutex> infoLock(m_infoMutex);
+                    m_recordingInfo.originalFrameCount++;
                 }
+                firstFrame.release();
             }
-            frameBuffer.clear();
             continue;
         }
 
         // ---- 正常写入循环 ----
-        // 使用带超时的dequeue，每500ms检查一次是否需要停止
         cv::Mat frame = m_originalQueue.dequeue_timeout(500);
         if (frame.empty()) {
-            // 超时或收到停止信号，重新检查循环条件
             continue;
         }
 
@@ -264,8 +231,6 @@ void RecordingManager::originalRecordLoop() {
         frame.release();
     }
 
-    frameBuffer.clear();
-
     // 安全关闭
     std::lock_guard<std::mutex> lock(m_originalWriterMutex);
     if (m_originalVideoWriter.isOpened()) {
@@ -277,31 +242,35 @@ void RecordingManager::originalRecordLoop() {
 void RecordingManager::inferenceRecordLoop() {
     PLOGI << "RecordingManager: Inference record thread started";
 
-    std::vector<cv::Mat> frameBuffer;
-    double actualFps = 15.0;
-
     while (m_isInferenceRecording.load() || !m_inferenceQueue.empty()) {
 
-        // ---- 初始化阶段：先采集帧测FPS，再打开VideoWriter ----
+        // ---- 初始化阶段：等待第一帧后打开VideoWriter ----
         if (!m_inferenceVideoWriter.isOpened()) {
-            if (frameBuffer.empty()) {
-                PLOGI << "RecordingManager: Measuring actual frame rate for inference recording...";
-                actualFps = measure_actual_fps(m_inferenceQueue, m_isInferenceRecording,
-                                               frameBuffer, 10, 30, 3500);
-            }
-
-            if (frameBuffer.empty()) {
-                m_isInferenceRecording.store(false);
+            cv::Mat firstFrame = m_inferenceQueue.dequeue_timeout(500);
+            if (firstFrame.empty()) {
+                if (!m_isInferenceRecording.load()) break;
                 continue;
             }
+
             {
                 std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
-                double fps = m_highPerformanceMode.load()
-                    ? std::min(actualFps, 20.0)
-                    : actualFps;
+                // 根据配置的编码格式创建fourcc
+                int fourcc;
+                if (m_recordingConfig.codec == "XVID") {
+                    fourcc = cv::VideoWriter::fourcc('X','V','I','D');
+                } else if (m_recordingConfig.codec == "H264") {
+                    fourcc = cv::VideoWriter::fourcc('H','2','6','4');
+                } else if (m_recordingConfig.codec == "MP4V") {
+                    fourcc = cv::VideoWriter::fourcc('M','P','4','V');
+                } else if (m_recordingConfig.codec == "IYUV") {
+                    fourcc = cv::VideoWriter::fourcc('I','Y','U','V');
+                } else {
+                    fourcc = cv::VideoWriter::fourcc('M','J','P','G');
+                }
+                
                 m_inferenceVideoWriter.open(m_inferenceRecordPath,
-                                          cv::VideoWriter::fourcc('M','J','P','G'),
-                                          fps, frameBuffer.front().size());
+                                          fourcc,
+                                          m_recordingConfig.fps, firstFrame.size());
 
                 if (!m_inferenceVideoWriter.isOpened()) {
                     PLOGE << "RecordingManager: Failed to open inference video writer";
@@ -310,28 +279,22 @@ void RecordingManager::inferenceRecordLoop() {
                     continue;
                 }
                 PLOGI << "RecordingManager: Inference VideoWriter opened: "
-                      << frameBuffer.front().cols << "x" << frameBuffer.front().rows
-                      << " @ " << fps << " FPS (actual)";
+                      << firstFrame.cols << "x" << firstFrame.rows
+                      << " @ " << m_recordingConfig.fps << " FPS";
 
-                // 写入缓存的帧
-                for (auto& f : frameBuffer) {
-                    m_inferenceVideoWriter.write(f);
-                    {
-                        std::lock_guard<std::mutex> infoLock(m_infoMutex);
-                        m_recordingInfo.inferenceFrameCount++;
-                    }
-                    f.release();
+                m_inferenceVideoWriter.write(firstFrame);
+                {
+                    std::lock_guard<std::mutex> infoLock(m_infoMutex);
+                    m_recordingInfo.inferenceFrameCount++;
                 }
+                firstFrame.release();
             }
-            frameBuffer.clear();
             continue;
         }
 
         // ---- 正常写入循环 ----
-        // 使用带超时的dequeue，每500ms检查一次是否需要停止
         cv::Mat frame = m_inferenceQueue.dequeue_timeout(500);
         if (frame.empty()) {
-            // 超时或收到停止信号，重新检查循环条件
             continue;
         }
 
@@ -348,8 +311,6 @@ void RecordingManager::inferenceRecordLoop() {
         emit frameRecorded(false, m_recordingInfo.inferenceFrameCount);
         frame.release();
     }
-
-    frameBuffer.clear();
 
     // 安全关闭
     std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);

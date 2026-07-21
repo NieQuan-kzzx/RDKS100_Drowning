@@ -6,6 +6,7 @@
 #include <mutex>
 #include "ThreadSafeQueue.h"
 #include <opencv2/opencv.hpp>
+#include "Config.h"
 
 /**
  * @brief 录制管理器 - 专门负责视频录制功能
@@ -35,8 +36,11 @@ public:
     void submitOriginalFrame(const cv::Mat& frame);
     void submitInferenceFrame(const cv::Mat& frame);
 
-    // 性能控制
-    void setRecordingPerformanceMode(bool highPerformance); // true: 高性能模式，false: 高质量模式
+    // 性能控制（保留接口兼容性，但不再影响帧率）
+    void setRecordingPerformanceMode(bool highPerformance);
+
+    // 配置设置
+    void setRecordingConfig(const RecordingConfig& config);
 
     // 录制信息
     struct RecordingInfo {
@@ -66,9 +70,12 @@ public:
     std::atomic<bool> m_highPerformanceMode{false}; 
 
 private:
+    // 配置
+    RecordingConfig m_recordingConfig;
+
     // 原始流录制
     std::atomic<bool> m_isOriginalRecording{false};
-    ThreadSafeQueue<cv::Mat> m_originalQueue{15};
+    ThreadSafeQueue<cv::Mat> m_originalQueue{25};
     std::thread m_originalRecordThread;
     cv::VideoWriter m_originalVideoWriter;
     std::mutex m_originalWriterMutex;
@@ -76,7 +83,7 @@ private:
 
     // 推理流录制
     std::atomic<bool> m_isInferenceRecording{false};
-    ThreadSafeQueue<cv::Mat> m_inferenceQueue{15};
+    ThreadSafeQueue<cv::Mat> m_inferenceQueue{25};
     std::thread m_inferenceRecordThread;
     cv::VideoWriter m_inferenceVideoWriter;
     std::mutex m_inferenceWriterMutex;

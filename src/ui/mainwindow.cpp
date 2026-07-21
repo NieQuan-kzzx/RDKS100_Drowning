@@ -37,15 +37,20 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_coordinator_1, &DetectionCoordinator::modelSwitched, this, [this](const QString& modelType){
         ui->btnConfirm->setEnabled(true);
         ui->statusbar->showMessage("模型 " + modelType + " 加载完成", 3000);
-        // 如果正在录制，启动推理流录制
-        if (ui->radioStartRecord->isChecked()) {
-            QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
-            m_coordinator_1->startRecording("Cam1_Infer_" + timeStr.toStdString());
-            m_coordinator_2->startRecording("Cam2_Infer_" + timeStr.toStdString());
-            auto recordingManager1 = m_coordinator_1->getRecordingManager();
-            auto recordingManager2 = m_coordinator_2->getRecordingManager();
-            if (recordingManager1) recordingManager1->setRecordingPerformanceMode(true);
-            if (recordingManager2) recordingManager2->setRecordingPerformanceMode(true);
+        // 如果正在录制且推理流未启动，启动推理流录制
+        if (ui->radioStartRecord->isChecked() && m_coordinator_1->isRecording()) {
+            auto rm1 = m_coordinator_1->getRecordingManager();
+            auto rm2 = m_coordinator_2->getRecordingManager();
+            if (rm1 && !rm1->isInferenceRecording()) {
+                QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+                m_coordinator_1->startRecording("Cam1_Infer_" + timeStr.toStdString());
+                if (rm1) rm1->setRecordingPerformanceMode(true);
+            }
+            if (rm2 && !rm2->isInferenceRecording()) {
+                QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+                m_coordinator_2->startRecording("Cam2_Infer_" + timeStr.toStdString());
+                if (rm2) rm2->setRecordingPerformanceMode(true);
+            }
         }
     });
     connect(m_coordinator_2, &DetectionCoordinator::modelSwitched, this, [this](const QString& modelType){
@@ -110,6 +115,10 @@ void MainWindow::initSystems()
     m_coordinator_1->getInferenceManager()->setInferenceQueueMaxSize(m_config.inference_queue_max_size);
     m_coordinator_2->getInferenceManager()->setInferenceQueueMaxSize(m_config.inference_queue_max_size);
 
+    // 设置录制配置
+    m_coordinator_1->getRecordingManager()->setRecordingConfig(m_config.recording);
+    m_coordinator_2->getRecordingManager()->setRecordingConfig(m_config.recording);
+
     updateButtonStates();
 }
 
@@ -120,8 +129,14 @@ void MainWindow::handleRecording(bool start)
     if ((!m_cam_1 || !m_cam_1->isRunning()) && (!m_cam_2 || !m_cam_2->isRunning())) return;
 
     if (start) {
+        // 防重复点击：已经在录制中则忽略
+        if (m_coordinator_1->isRecording() || m_coordinator_2->isRecording()) {
+            ui->statusbar->showMessage("录制已在进行中", 2000);
+            return;
+        }
+
         QString timeStr = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
-        
+
         m_coordinator_1->startRecording("Cam1_" + timeStr.toStdString());
         m_coordinator_2->startRecording("Cam2_" + timeStr.toStdString());
 

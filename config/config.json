@@ -3,20 +3,20 @@
         "cameras": [
             {
                 "name": "Camera 1",
-                "url": "rtsp://admin:nuaa2026@192.168.137.15",
+                "url": "rtsp://127.0.0.1/assets/zuoshiyan.h264",
                 "width": 1920,
                 "height": 1080,
-                "queue_max_length": 100,
+                "queue_max_length": 50,
                 "capture_interval_ms": 0,
                 "is_full_drop": false,
-                "decode_mode": "HARDWARE"
+                "decode_mode": "SOFTWARE"
             },
             {
                 "name": "Camera 2",
-                "url": "rtsp://admin:nuaa2027@192.168.137.20",
+                "url": "rtsp://127.0.0.1/assets/Final_Drowning.h264",
                 "width": 1920,
                 "height": 1080,
-                "queue_max_length": 100,
+                "queue_max_length": 50,
                 "capture_interval_ms": 0,
                 "is_full_drop": false,
                 "decode_mode": "HARDWARE"
@@ -70,6 +70,11 @@
         "save_paths": {
             "snapshot_dir": "./snapshots",
             "record_dir": "./records"
+        },
+        "recording": {
+            "fps": 25.0,
+            "codec": "MP4V",
+            "queue_size": 25
         },
         "inference_queue_max_size": 2
     }

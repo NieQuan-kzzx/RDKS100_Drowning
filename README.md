@@ -451,11 +451,9 @@ hobot_utils (编译自 /app/cdev_demo/bpu/utils/src/)
 - **功能**: 双路同步录制（原始画面 + 推理画面）
 - **特点**:
   - 双独立录制管线（原始 + 推理），各有独立队列、线程、`VideoWriter`、互斥锁
-  - 录制前测量实际 FPS（缓冲前 10 帧后，3.5 秒内测量帧到达速率）
-  - FPS 限幅 5-30，用于初始化 VideoWriter
+  - 固定 25 FPS 录制
   - **编码**: Motion JPEG（`M','J','P','G'` 四字符编码）
   - **输出路径**: 硬编码为 `/media/UBUNTU 18_0/records/`（USB 存储）
-  - **高性能模式**: FPS 上限设为 20 而非实际 FPS
 
 ---
 
@@ -476,7 +474,7 @@ hobot_utils (编译自 /app/cdev_demo/bpu/utils/src/)
   - 游泳检测 → `"SWIMMER"` 模型（`drowning_TwoSelect.hbm`），逻辑 `DrowningState`
   - 进水检测 → `"YOLOSEG"` 模型（`Water_seg.hbm`），无语义逻辑层
   - （`"Patchcore"` 模式注释待用）
-- **录制联动**: 模型切换确认后自动开启高性能录制（`setRecordingPerformanceMode(true)`，FPS 上限 20）
+- **录制联动**: 模型切换确认后自动开启高性能录制（固定 25 FPS）
 - **UI 状态刷新**: 500ms 定时器 → `updateButtonStates()`
 
 ---

@@ -85,11 +85,25 @@ struct SavePathsConfig {
     }
 };
 
+struct RecordingConfig {
+    double fps = 25.0;
+    std::string codec = "MJPG";
+    int queue_size = 25;
+
+    template <class Archive>
+    void serialize(Archive & archive) {
+        archive(CEREAL_NVP(fps),
+                CEREAL_NVP(codec),
+                CEREAL_NVP(queue_size));
+    }
+};
+
 struct AppConfig {
     std::vector<CameraConfig> cameras;
     std::vector<ModelEntry> models;
     DisplayConfig display;
     SavePathsConfig save_paths;
+    RecordingConfig recording;
     int inference_queue_max_size = 2;
 
     template <class Archive>
@@ -98,6 +112,7 @@ struct AppConfig {
                 CEREAL_NVP(models),
                 CEREAL_NVP(display),
                 CEREAL_NVP(save_paths),
+                CEREAL_NVP(recording),
                 CEREAL_NVP(inference_queue_max_size));
     }
 
