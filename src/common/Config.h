@@ -31,7 +31,6 @@ struct CameraConfig {
     int queue_max_length = 25;
     int capture_interval_ms = 0;
     bool is_full_drop = false;
-    std::string decode_mode = "HARDWARE";
 
     template <class Archive>
     void serialize(Archive & archive) {
@@ -41,8 +40,7 @@ struct CameraConfig {
                 CEREAL_NVP(height),
                 CEREAL_NVP(queue_max_length),
                 CEREAL_NVP(capture_interval_ms),
-                CEREAL_NVP(is_full_drop),
-                CEREAL_NVP(decode_mode));
+                CEREAL_NVP(is_full_drop));
     }
 };
 

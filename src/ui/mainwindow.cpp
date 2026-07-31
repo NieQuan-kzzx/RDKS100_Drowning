@@ -98,11 +98,9 @@ MainWindow::~MainWindow()
 void MainWindow::initSystems()
 {
     auto makeCam = [&](const CameraConfig& c) -> RTSPCamera* {
-        RTSPCamera::DecodeMode mode = (c.decode_mode == "SOFTWARE")
-            ? RTSPCamera::SOFTWARE : RTSPCamera::HARDWARE;
         return new RTSPCamera(c.url, c.width, c.height,
                               c.queue_max_length, c.capture_interval_ms,
-                              c.is_full_drop, mode);
+                              c.is_full_drop);
     };
     if (m_config.cameras.size() >= 1)
         m_cam_1 = makeCam(m_config.cameras[0]);

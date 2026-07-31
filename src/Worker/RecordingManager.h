@@ -36,6 +36,9 @@ public:
     void submitOriginalFrame(const cv::Mat& frame);
     void submitInferenceFrame(const cv::Mat& frame);
 
+    // 获取文件扩展名（基于当前codec配置）
+    std::string getFileExtension() const;
+
     // 性能控制（保留接口兼容性，但不再影响帧率）
     void setRecordingPerformanceMode(bool highPerformance);
 
@@ -62,6 +65,7 @@ signals:
 private:
     void originalRecordLoop();
     void inferenceRecordLoop();
+    int getFourCC() const;
 
 public:
     std::string generateRecordingPath(const std::string& basePath, const std::string& suffix);

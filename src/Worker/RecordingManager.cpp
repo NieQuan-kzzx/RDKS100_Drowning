@@ -25,6 +25,25 @@ void RecordingManager::setRecordingConfig(const RecordingConfig& config) {
           << ", Queue size: " << config.queue_size;
 }
 
+int RecordingManager::getFourCC() const {
+    if (m_recordingConfig.codec == "XVID") {
+        return cv::VideoWriter::fourcc('X','V','I','D');
+    } else if (m_recordingConfig.codec == "H264") {
+        return cv::VideoWriter::fourcc('H','2','6','4');
+    } else if (m_recordingConfig.codec == "MP4V") {
+        return cv::VideoWriter::fourcc('M','P','4','V');
+    } else if (m_recordingConfig.codec == "IYUV") {
+        return cv::VideoWriter::fourcc('I','Y','U','V');
+    }
+    return cv::VideoWriter::fourcc('M','J','P','G');
+}
+
+std::string RecordingManager::getFileExtension() const {
+    if (m_recordingConfig.codec == "MP4V") return ".mp4";
+    if (m_recordingConfig.codec == "H264") return ".h264";
+    return ".avi";
+}
+
 RecordingManager::~RecordingManager() {
     stopAllRecording();
     if (m_originalRecordThread.joinable()) {
@@ -99,8 +118,9 @@ bool RecordingManager::startDualRecording(const std::string& basePath) {
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
 
-    std::string originalPath = generateRecordingPath(basePath, "_original_" + ss.str() + ".avi");
-    std::string inferencePath = generateRecordingPath(basePath, "_inference_" + ss.str() + ".avi");
+    std::string ext = getFileExtension();
+    std::string originalPath = generateRecordingPath(basePath, "_original_" + ss.str() + ext);
+    std::string inferencePath = generateRecordingPath(basePath, "_inference_" + ss.str() + ext);
 
     bool originalSuccess = startOriginalRecording(originalPath);
     bool inferenceSuccess = startInferenceRecording(inferencePath);
@@ -173,20 +193,8 @@ void RecordingManager::originalRecordLoop() {
 
             {
                 std::lock_guard<std::mutex> lock(m_originalWriterMutex);
-                // 根据配置的编码格式创建fourcc
-                int fourcc;
-                if (m_recordingConfig.codec == "XVID") {
-                    fourcc = cv::VideoWriter::fourcc('X','V','I','D');
-                } else if (m_recordingConfig.codec == "H264") {
-                    fourcc = cv::VideoWriter::fourcc('H','2','6','4');
-                } else if (m_recordingConfig.codec == "MP4V") {
-                    fourcc = cv::VideoWriter::fourcc('M','P','4','V');
-                } else if (m_recordingConfig.codec == "IYUV") {
-                    fourcc = cv::VideoWriter::fourcc('I','Y','U','V');
-                } else {
-                    fourcc = cv::VideoWriter::fourcc('M','J','P','G');
-                }
-                
+                int fourcc = getFourCC();
+
                 m_originalVideoWriter.open(m_originalRecordPath,
                                          fourcc,
                                          m_recordingConfig.fps, firstFrame.size());
@@ -206,7 +214,6 @@ void RecordingManager::originalRecordLoop() {
                     std::lock_guard<std::mutex> infoLock(m_infoMutex);
                     m_recordingInfo.originalFrameCount++;
                 }
-                firstFrame.release();
             }
             continue;
         }
@@ -228,7 +235,6 @@ void RecordingManager::originalRecordLoop() {
         }
 
         emit frameRecorded(true, m_recordingInfo.originalFrameCount);
-        frame.release();
     }
 
     // 安全关闭
@@ -254,20 +260,8 @@ void RecordingManager::inferenceRecordLoop() {
 
             {
                 std::lock_guard<std::mutex> lock(m_inferenceWriterMutex);
-                // 根据配置的编码格式创建fourcc
-                int fourcc;
-                if (m_recordingConfig.codec == "XVID") {
-                    fourcc = cv::VideoWriter::fourcc('X','V','I','D');
-                } else if (m_recordingConfig.codec == "H264") {
-                    fourcc = cv::VideoWriter::fourcc('H','2','6','4');
-                } else if (m_recordingConfig.codec == "MP4V") {
-                    fourcc = cv::VideoWriter::fourcc('M','P','4','V');
-                } else if (m_recordingConfig.codec == "IYUV") {
-                    fourcc = cv::VideoWriter::fourcc('I','Y','U','V');
-                } else {
-                    fourcc = cv::VideoWriter::fourcc('M','J','P','G');
-                }
-                
+                int fourcc = getFourCC();
+
                 m_inferenceVideoWriter.open(m_inferenceRecordPath,
                                           fourcc,
                                           m_recordingConfig.fps, firstFrame.size());
@@ -287,7 +281,6 @@ void RecordingManager::inferenceRecordLoop() {
                     std::lock_guard<std::mutex> infoLock(m_infoMutex);
                     m_recordingInfo.inferenceFrameCount++;
                 }
-                firstFrame.release();
             }
             continue;
         }
@@ -309,7 +302,6 @@ void RecordingManager::inferenceRecordLoop() {
         }
 
         emit frameRecorded(false, m_recordingInfo.inferenceFrameCount);
-        frame.release();
     }
 
     // 安全关闭
@@ -351,10 +343,9 @@ void RecordingManager::inferenceRecordLoop() {
 
 
 std::string RecordingManager::generateRecordingPath(const std::string& basePath, const std::string& suffix) {
-    // === 修改部分：将录像目录指向 U 盘 ===
-    // 注意：路径包含空格，必须作为完整字符串赋值
-    std::string recordsDir = "/media/UBUNTU 18_01/records"; 
-    // ======================================
+    // === 将录像目录指向 U 盘 ===
+    std::string recordsDir = "/media/76E8-CACF/records"; 
+    // ===========================
 
 #if __has_include(<filesystem>) && __cplusplus >= 201703L
     // 使用C++17 filesystem

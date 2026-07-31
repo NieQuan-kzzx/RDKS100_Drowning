@@ -138,16 +138,17 @@ bool DetectionCoordinator::startRecording(const std::string& basePath) {
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
     std::string timestamp = ss.str();
+    std::string ext = m_recordingManager->getFileExtension();
 
     std::string originalPath = m_recordingManager->generateRecordingPath(
-        path, "_original_" + timestamp + ".avi");
+        path, "_original_" + timestamp + ext);
     bool originalOk = m_recordingManager->startOriginalRecording(originalPath);
 
     std::string inferencePath;
     bool inferenceOk = false;
     if (m_inferenceManager->isRunning()) {
         inferencePath = m_recordingManager->generateRecordingPath(
-            path, "_inference_" + timestamp + ".avi");
+            path, "_inference_" + timestamp + ext);
         inferenceOk = m_recordingManager->startInferenceRecording(inferencePath);
     }
 

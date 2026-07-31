@@ -1,21 +1,11 @@
 #include "RTSPCamera.h"
 
-// 内存池键名常量定义
-const std::string RTSPCamera::YUV_FRAME_KEY = "yuv_frame";
-const std::string RTSPCamera::BGR_FRAME_KEY = "bgr_frame";
-
 RTSPCamera::RTSPCamera(const std::string& url, int width, int height,
                        int _queue_max_length, int _capture_interval_ms,
-                       bool _is_full_drop, DecodeMode decode_mode)
+                       bool _is_full_drop)
     : ImageSensor(_queue_max_length, _capture_interval_ms, _is_full_drop),
       m_rtsp_url(url), m_width(width), m_height(height),
-      m_matPool(MatPoolManager::getPool(cv::Size(width, height), CV_8UC3)),
-      m_decode_mode(decode_mode) {
-
-    if (m_decode_mode == HARDWARE) {
-        yuv_frame_ = cv::Mat(cv::Size(width, height * 3 / 2), CV_8UC1);
-        bgr_frame_ = cv::Mat(cv::Size(width, height), CV_8UC3);
-    }
+      m_matPool(MatPoolManager::getPool(cv::Size(width, height), CV_8UC3)) {
 
     setMatPool(&m_matPool);
 }
@@ -71,75 +61,7 @@ void RTSPCamera::pause() { m_is_paused.store(true); }
 void RTSPCamera::resume() { m_is_paused.store(false); }
 
 void RTSPCamera::dataCollectionLoop() {
-    if (m_decode_mode == HARDWARE) {
-        hardwareDecodeLoop();
-    } else {
-        softwareDecodeLoop();
-    }
-}
-
-void RTSPCamera::hardwareDecodeLoop() {
-    m_decoder = sp_init_decoder_module();
-    int ret = sp_start_decode(m_decoder, const_cast<char*>(m_rtsp_url.c_str()),
-                             0, SP_ENCODER_H264, m_width, m_height);
-
-    if (ret != 0) {
-        PLOGE << "RTSPCamera: Failed to start hardware decoder, ret: " << ret;
-        this->is_running.store(false);
-        return;
-    }
-
-    PLOGI << "RTSPCamera: Hardware decoding started.";
-
-    while (this->is_running.load()) {
-        ret = sp_decoder_get_image(m_decoder, reinterpret_cast<char*>(yuv_frame_.data));
-
-        if (ret == 0) {
-            if (m_is_paused.load()) {
-                this->clear();
-                std::this_thread::sleep_for(std::chrono::milliseconds(30));
-                continue;
-            }
-            cv::cvtColor(yuv_frame_, bgr_frame_, cv::COLOR_YUV2BGR_NV12);
-
-            cv::Mat poolMat = m_matPool.getMat();
-            if(!poolMat.empty()){
-                cv::cvtColor(yuv_frame_, poolMat, cv::COLOR_YUV2BGR_NV12);
-                this->enqueueData(poolMat);
-            }
-
-            if (capture_interval_ms > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(capture_interval_ms));
-            }
-        } else {
-            PLOGE << "RTSPCamera: Failed to get image from hardware decoder, reopening stream...";
-            if (m_decoder) {
-                sp_stop_decode(m_decoder);
-                sp_release_decoder_module(m_decoder);
-                m_decoder = nullptr;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            m_decoder = sp_init_decoder_module();
-            ret = sp_start_decode(m_decoder, const_cast<char*>(m_rtsp_url.c_str()),
-                                 0, SP_ENCODER_H264, m_width, m_height);
-            if (ret != 0) {
-                PLOGE << "RTSPCamera: Failed to restart hardware decoder, ret: " << ret;
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-            } else {
-                PLOGI << "RTSPCamera: Hardware decoder restarted successfully";
-            }
-        }
-    }
-
-    if (m_decoder) {
-        PLOGI << "RTSPCamera: Releasing hardware resources...";
-        sp_stop_decode(m_decoder);
-        sp_release_decoder_module(m_decoder);
-        m_decoder = nullptr;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        PLOGI << "RTSPCamera: Hardware released safely.";
-    }
+    softwareDecodeLoop();
 }
 
 void RTSPCamera::softwareDecodeLoop() {
