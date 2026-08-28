@@ -26,7 +26,7 @@ void Yolo11Infer::draw(cv::Mat& frame, const std::vector<Detection>& results) {
 
         // 获取标签名称
         std::string label_name = (det.class_id < m_labels.size()) ? m_labels[det.class_id] : "unknown";
-        std::string txt = "ID:" + std::to_string(det.track_id) + " " + label_name;
+        std::string txt = "ID:" + std::to_string(det.track_id);
 
         // 1. 画矩形框 (线条加粗到 3)
         cv::rectangle(frame, det.rect, color, 3);

@@ -339,7 +339,7 @@ void MainWindow::on_btnPause_clicked() {
 }
 
 void MainWindow::handleSnapshot(cv::Mat raw, cv::Mat infer, int id) {
-    QString dirPath = "/media/UBUNTU 18_01/records/";
+    QString dirPath = "/media/76E8-CACF/records/";
     QDir dir;
     if (!dir.exists(dirPath)) dir.mkpath(dirPath); 
 
